@@ -1,5 +1,5 @@
 [package]
-name = "tigerden-ruversi"
+name = "tigerdenversi"
 version = "0.1.0"
 edition = "2021"
 description = "training program for ruversi."
