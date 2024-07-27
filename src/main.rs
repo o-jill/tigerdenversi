@@ -1,12 +1,8 @@
-use std::default;
 use std::io::Write;
 
-use bitboard::CELL_2D;
-use tch::nn::{LinearConfig, ModuleT, OptimizerConfig};
-use tch::{data, Kind, Tensor};
-use tch::{nn, {nn::VarStore, nn::Module}};
-use tch::Device;
-use tch::data::Iter2;
+use clap::Parser;
+use tch::{nn, nn::{Module, ModuleT, OptimizerConfig, VarStore}};
+use tch::{Device, data::Iter2, Kind, Tensor};
 
 mod kifu;
 mod bitboard;
@@ -14,6 +10,12 @@ mod bitboard;
 const INPUTSIZE :i64 = 8 * 8 + 1 + 2;
 const HIDDENSIZE : i64 = 16;
 const MINIBATCH : i64 = 16;
+
+#[derive(Debug, Parser)]
+#[command(version, author, about)]
+struct Arg {
+    //
+}
 
 fn net(vs : &nn::Path) -> impl Module {
     nn::seq()
@@ -30,6 +32,8 @@ fn main() -> Result<(), tch::TchError> {
     // let t = Tensor::from_slice(&[3, 1, 4, 1, 5]);
     let t = t * 2;
     t.print();
+
+    let _arg = Arg::parse();
 
     let kifupath = "./kifu";
     // list up kifu
@@ -89,7 +93,7 @@ fn main() -> Result<(), tch::TchError> {
     }
 
     for epock in 1..20 {
-        let mut dataset = data::Iter2::new(&input, &target, MINIBATCH);
+        let mut dataset = Iter2::new(&input, &target, MINIBATCH);
         let dataset = dataset.shuffle();
         let mut loss = tch::Tensor::new();
         for (xs, ys) in dataset {
