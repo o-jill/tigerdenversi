@@ -14,7 +14,18 @@ const MINIBATCH : i64 = 16;
 #[derive(Debug, Parser)]
 #[command(version, author, about)]
 struct Arg {
-    //
+    /// path for weight.safetensor
+    #[arg(short, long)]
+    weight: Option<String>,
+    /// initial learning rate
+    #[arg(short, long, default_value_t = 0.01)]
+    eta : f64,
+    /// # of epochs
+    #[arg(long, default_value_t = 100)]
+    epoch : usize,
+    /// mini batch size
+    #[arg(long, default_value_t = 16)]
+    minibatch : i64,
 }
 
 fn net(vs : &nn::Path) -> impl Module {
@@ -33,7 +44,7 @@ fn main() -> Result<(), tch::TchError> {
     let t = t * 2;
     t.print();
 
-    let _arg = Arg::parse();
+    let arg = Arg::parse();
 
     let kifupath = "./kifu";
     // list up kifu
@@ -47,7 +58,7 @@ fn main() -> Result<(), tch::TchError> {
             fnm.contains("kifu")
             // fnm.contains(".txt")
         }).cloned().collect::<Vec<String>>();
-    // println!("{:?}", files);
+    println!("{:?}", files);
 
     files.sort();
     let mut boards : Vec<(bitboard::BitBoard, i8, i8, i8, i8)> = Vec::new();
@@ -85,15 +96,19 @@ fn main() -> Result<(), tch::TchError> {
         &targetlist).view((boards.len() as i64, 1));
     println!("target: {} {:?}", target.dim(), target.size());
 
-    let vs = VarStore::new(Device::Cpu);
+    let mut vs = VarStore::new(Device::Cpu);
     let nnet = net(&vs.root());
-    let mut optm = nn::Adam::default().build(&vs, 1e-4)?;
+    if arg.weight.is_some() {
+        println!("load weight: {}", arg.weight.as_ref().unwrap());
+        vs.load(arg.weight.as_ref().unwrap()).unwrap();
+    }
+    let mut optm = nn::Adam::default().build(&vs, arg.eta)?;
     for (key, t) in vs.variables().iter_mut() {
         println!("{key}:{:?}", t.size());
     }
 
-    for epock in 1..20 {
-        let mut dataset = Iter2::new(&input, &target, MINIBATCH);
+    for epock in 1..=arg.epoch {
+        let mut dataset = Iter2::new(&input, &target, arg.minibatch);
         let dataset = dataset.shuffle();
         let mut loss = tch::Tensor::new();
         for (xs, ys) in dataset {
@@ -109,7 +124,7 @@ fn main() -> Result<(), tch::TchError> {
     // VarStore to weights
     let weights = vs.variables();
     let mut outp = [0.0f32 ; (INPUTSIZE * HIDDENSIZE) as usize];
-    let mut params = String::new();
+    let mut params = String::from("# 64+1+2-16-1\n");
     let mut paramste = String::new();
     let mut paramsfb = String::new();
     let mut paramsfw = String::new();
