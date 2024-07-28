@@ -14,9 +14,9 @@ const HIDDENSIZE : i64 = 16;
 #[derive(Debug, Parser)]
 #[command(version, author, about)]
 struct Arg {
-    /// path for weight.safetensor
+    /// path for weight.safetensor to use
     #[arg(short, long)]
-    weight: Option<String>,
+    weight : Option<String>,
     /// initial learning rate
     #[arg(short, long, default_value_t = 0.01)]
     eta : f64,
@@ -26,6 +26,12 @@ struct Arg {
     /// mini batch size
     #[arg(long, default_value_t = 16)]
     minibatch : i64,
+    /// storing weight after some iterations as weight.EPOCH.txt.
+    #[arg(short, long)]
+    progress : Option<String>,
+    /// cosine anealing period.
+    #[arg(short, long, default_value_t = 0)]
+    anealing : i32,
 }
 
 fn net(vs : &nn::Path) -> impl Module {
