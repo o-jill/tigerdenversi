@@ -81,7 +81,12 @@ fn main() -> Result<(), tch::TchError> {
             boards.push((ban270, t.teban, fsb, fsw, kifu.score.unwrap()));
         }
     }
+    boards.sort_by(|a, b| {
+            a.0.black.cmp(&b.0.black).then(a.0.white.cmp(&b.0.white))
+        });
+    boards.dedup_by(|a, b| {a == b});
     println!("board: {} boards", boards.len());
+
     let inputlist = boards.iter().map(|(b, t, fb, fw, _s)| {
         let mut v = [0.0f32 ; INPUTSIZE as usize];
         for x in 0..8 {

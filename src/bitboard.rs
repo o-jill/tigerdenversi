@@ -22,6 +22,7 @@ const BITPTN : [u64 ; 9] = [
     0x1010101010101, 0x101010101010101,
 ];
 
+#[derive(PartialEq)]
 pub struct BitBoard {
     pub black: u64,
     pub white: u64,
