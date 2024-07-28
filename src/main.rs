@@ -71,7 +71,14 @@ fn main() -> Result<(), tch::TchError> {
         for t in kifu.list.iter() {
             let ban = bitboard::BitBoard::from(&t.rfen).unwrap();
             let (fsb, fsw) = ban.fixedstones();
+
+            let ban90 = ban.rotate90();
+            let ban180 = ban.rotate180();
+            let ban270 = ban180.rotate90();
             boards.push((ban, t.teban, fsb, fsw, kifu.score.unwrap()));
+            boards.push((ban90, t.teban, fsb, fsw, kifu.score.unwrap()));
+            boards.push((ban180, t.teban, fsb, fsw, kifu.score.unwrap()));
+            boards.push((ban270, t.teban, fsb, fsw, kifu.score.unwrap()));
         }
     }
     println!("board: {} boards", boards.len());
