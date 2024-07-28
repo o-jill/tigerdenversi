@@ -128,9 +128,11 @@ fn main() -> Result<(), tch::TchError> {
             loss = nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
             optm.backward_step(&loss);
         }
-        let accu = nnet.batch_accuracy_for_logits(&input, &target, vs.device(), 400);
-        println!("ep:{epock}, {}, {:.3}", loss.sum(Some(tch::Kind::Float)), accu * 10.00);
+        // let accu = nnet.batch_accuracy_for_logits(&input, &target, vs.device(), 400);
+        // println!("ep:{epock}, {}, {:.3}", loss.sum(Some(tch::Kind::Float)), accu * 100.00);
+        print!("ep:{epock} ");
     }
+    println!("save to weight.safetensors");
     vs.save("weight.safetensors").unwrap();
 
     // VarStore to weights
