@@ -1,7 +1,7 @@
 use std::io::Write;
 
 use clap::Parser;
-use tch::{nn, nn::{Module, ModuleT, OptimizerConfig, VarStore}};
+use tch::{nn, nn::{Module, OptimizerConfig, VarStore}};
 use tch::{Device, data::Iter2, Kind, Tensor};
 
 mod kifu;
@@ -9,7 +9,7 @@ mod bitboard;
 
 const INPUTSIZE :i64 = 8 * 8 + 1 + 2;
 const HIDDENSIZE : i64 = 16;
-const MINIBATCH : i64 = 16;
+// const MINIBATCH : i64 = 16;
 
 #[derive(Debug, Parser)]
 #[command(version, author, about)]
@@ -51,8 +51,8 @@ fn main() -> Result<(), tch::TchError> {
     let dir = std::fs::read_dir(kifupath).unwrap();
     let mut files = dir.filter_map(|entry| {
         entry.ok().and_then(|e|
-            e.path().file_name().and_then(|n|
-                Some(n.to_str().unwrap().to_string())
+            e.path().file_name().map(|n|
+                n.to_str().unwrap().to_string()
             )
         )}).collect::<Vec<String>>().iter().filter(|&fnm| {
             fnm.contains("kifu")
@@ -122,10 +122,10 @@ fn main() -> Result<(), tch::TchError> {
     for epock in 1..=arg.epoch {
         let mut dataset = Iter2::new(&input, &target, arg.minibatch);
         let dataset = dataset.shuffle();
-        let mut loss = tch::Tensor::new();
+        // let mut loss = tch::Tensor::new();
         for (xs, ys) in dataset {
             // println!("xs: {} {:?} ys: {} {:?}", xs.dim(), xs.size(), ys.dim(), ys.size());
-            loss = nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+            let loss = nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
             optm.backward_step(&loss);
         }
         // let accu = nnet.batch_accuracy_for_logits(&input, &target, vs.device(), 400);

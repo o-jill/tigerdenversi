@@ -50,18 +50,14 @@ impl BitBoard {
         if elem.len() != 2 || elem[1].find(|c:char| c == 'b' || c == 'f' || c == 'w').is_none() {
             return Err(String::from("Invalid rfen"));
         }
-        let teban;
-        match elem[1] {
-            "b" => {teban = SENTE},
-            "w" => {teban = GOTE},
-            "f" => {teban = BLANK}
+        let teban = match elem[1] {
+            "b" => {SENTE},
+            "w" => {GOTE},
+            "f" => {BLANK}
             _ => { return Err(format!("Invalid teban: {}", elem[1])); }
-        }
+        };
         let mut ret = BitBoard {
-            black : 0,
-            white : 0,
-            teban : teban,
-            pass : 0,
+            black : 0, white : 0, teban, pass : 0,
         };
         let mut x = 0;
         let mut y = 0;
@@ -805,7 +801,7 @@ impl BitBoard {
             if (tgt & bit) == 0 {return fcells;}
 
             fcells |= bit;
-            *count = *count + 1;
+            *count += 1;
         }
         fcells
     }
@@ -818,7 +814,7 @@ impl BitBoard {
             if (tgt & bit) == 0 {return fcells;}
 
             fcells |= bit;
-            *count = *count + 1;
+            *count += 1;
         }
         fcells
     }
@@ -831,7 +827,7 @@ impl BitBoard {
             if (tgt & bit) == 0 {return fcells;}
 
             fcells |= bit;
-            *count = *count + 1;
+            *count += 1;
         }
         fcells
     }
@@ -844,7 +840,7 @@ impl BitBoard {
             if (tgt & bit) == 0 {return fcells;}
 
             fcells |= bit;
-            *count = *count + 1;
+            *count += 1;
         }
         fcells
     }
@@ -1144,7 +1140,7 @@ impl BitBoard {
             for _x in (1..7).rev() {
                 let cb = (bit & black) != 0;
                 let cw = (bit & white) != 0;
-                if (cb | cw) == false {break;}
+                if !(cb | cw) {break;}
 
                 if (bit & (fcellsb | fcellsw)) != 0 {
                     bit >>= NUMCELL;
