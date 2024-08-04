@@ -64,13 +64,13 @@ fn main() -> Result<(), tch::TchError> {
             fnm.contains("kifu")
             // fnm.contains(".txt")
         }).cloned().collect::<Vec<String>>();
-    println!("{:?}", files);
+    // println!("{:?}", files);
 
     files.sort();
     let mut boards : Vec<(bitboard::BitBoard, i8, i8, i8, i8)> = Vec::new();
     for fname in files.iter() {
         let path = format!("kifu/{}", fname);
-        println!("{path}");
+        print!("{path}\r");
         let content = std::fs::read_to_string(&path).unwrap();
         let lines:Vec<&str> = content.split('\n').collect();
         let kifu = kifu::Kifu::from(&lines);
@@ -87,6 +87,7 @@ fn main() -> Result<(), tch::TchError> {
             boards.push((ban270, t.teban, fsb, fsw, kifu.score.unwrap()));
         }
     }
+    println!("");
     boards.sort_by(|a, b| {
             a.0.black.cmp(&b.0.black).then(a.0.white.cmp(&b.0.white))
         });
