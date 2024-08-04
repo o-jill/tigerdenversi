@@ -10,6 +10,7 @@ mod bitboard;
 const INPUTSIZE :i64 = 8 * 8 + 1 + 2;
 const HIDDENSIZE : i64 = 16;
 // const MINIBATCH : i64 = 16;
+const MIN_COSANEAL : f64 = 1e-3;
 
 #[derive(Debug, Parser)]
 #[command(version, author, about)]
@@ -121,23 +122,47 @@ fn main() -> Result<(), tch::TchError> {
         println!("load weight: {}", arg.weight.as_ref().unwrap());
         vs.load(arg.weight.as_ref().unwrap()).unwrap();
     }
-    let mut optm = nn::Adam::default().build(&vs, arg.eta)?;
+    let eta = arg.eta;
+    let mut optm = nn::AdamW::default().build(&vs, eta)?;
     for (key, t) in vs.variables().iter_mut() {
         println!("{key}:{:?}", t.size());
     }
-
-    for epock in 1..=arg.epoch {
-        let mut dataset = Iter2::new(&input, &target, arg.minibatch);
-        let dataset = dataset.shuffle();
-        // let mut loss = tch::Tensor::new();
-        for (xs, ys) in dataset {
-            // println!("xs: {} {:?} ys: {} {:?}", xs.dim(), xs.size(), ys.dim(), ys.size());
-            let loss = nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
-            optm.backward_step(&loss);
+    let period = arg.anealing;
+    if period > 1 {
+        for ep in 0..arg.epoch {
+            optm.set_lr(
+                eta * MIN_COSANEAL +
+                    eta * 0.5 * (1.0 - MIN_COSANEAL)
+                        * (1.0 + (ep as f64 / period as f64).cos())
+            );
+            let mut dataset = Iter2::new(&input, &target, arg.minibatch);
+            let dataset = dataset.shuffle();
+            // let mut loss = tch::Tensor::new();
+            for (xs, ys) in dataset {
+                // println!("xs: {} {:?} ys: {} {:?}", xs.dim(), xs.size(), ys.dim(), ys.size());
+                let loss = nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                optm.backward_step(&loss);
+            }
+            // let accu = nnet.batch_accuracy_for_logits(&input, &target, vs.device(), 400);
+            // println!("ep:{ep}, {}, {:.3}", loss.sum(Some(tch::Kind::Float)), accu * 100.00);
+            print!("ep:{ep} ");
+            std::io::stdout().flush().unwrap();
         }
-        // let accu = nnet.batch_accuracy_for_logits(&input, &target, vs.device(), 400);
-        // println!("ep:{epock}, {}, {:.3}", loss.sum(Some(tch::Kind::Float)), accu * 100.00);
-        print!("ep:{epock} ");
+    } else {
+        for ep in 0..arg.epoch {
+            let mut dataset = Iter2::new(&input, &target, arg.minibatch);
+            let dataset = dataset.shuffle();
+            // let mut loss = tch::Tensor::new();
+            for (xs, ys) in dataset {
+                // println!("xs: {} {:?} ys: {} {:?}", xs.dim(), xs.size(), ys.dim(), ys.size());
+                let loss = nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                optm.backward_step(&loss);
+            }
+            // let accu = nnet.batch_accuracy_for_logits(&input, &target, vs.device(), 400);
+            // println!("ep:{ep}, {}, {:.3}", loss.sum(Some(tch::Kind::Float)), accu * 100.00);
+            print!("ep:{ep} ");
+            std::io::stdout().flush().unwrap();
+        }
     }
     println!("save to weight.safetensors");
     vs.save("weight.safetensors").unwrap();
