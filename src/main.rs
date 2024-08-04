@@ -88,7 +88,7 @@ fn main() -> Result<(), tch::TchError> {
             boards.push((ban270, t.teban, fsb, fsw, kifu.score.unwrap()));
         }
     }
-    println!("");
+    println!();
     boards.sort_by(|a, b| {
             a.0.black.cmp(&b.0.black).then(a.0.white.cmp(&b.0.white))
         });
