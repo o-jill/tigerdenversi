@@ -123,7 +123,7 @@ fn storeweights(vs : VarStore) {
     // VarStore to weights
     let weights = vs.variables();
     let mut outp = [0.0f32 ; (INPUTSIZE * HIDDENSIZE) as usize];
-    let mut params = String::from("# 64+1+2-16-1\n");
+    let mut params = format!("# 64+1+2-{HIDDENSIZE}-1\n");
     let mut paramste = String::new();
     let mut paramsfb = String::new();
     let mut paramsfw = String::new();
