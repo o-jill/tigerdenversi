@@ -45,6 +45,24 @@ fn net(vs : &nn::Path) -> impl Module {
         .add(nn::linear(vs / "layer2", HIDDENSIZE, 1, Default::default()))
 }
 
+// list up kifu
+fn findfiles(kifupath : &str) -> Vec<String> {
+    let dir = std::fs::read_dir(kifupath).unwrap();
+    let mut files = dir.filter_map(|entry| {
+        entry.ok().and_then(|e|
+            e.path().file_name().map(|n|
+                n.to_str().unwrap().to_string()
+            )
+        )}).collect::<Vec<String>>().iter().filter(|&fnm| {
+            fnm.contains("kifu")
+            // fnm.contains(".txt")
+        }).cloned().collect::<Vec<String>>();
+    // println!("{:?}", files);
+
+    files.sort();
+    files
+}
+
 fn loadkifu(files : &[String]) -> Vec<(bitboard::BitBoard, i8, i8, i8, i8)> {
     let mut boards : Vec<(bitboard::BitBoard, i8, i8, i8, i8)> = Vec::new();
     for fname in files.iter() {
@@ -156,42 +174,7 @@ fn main() -> Result<(), tch::TchError> {
     let arg = Arg::parse();
 
     let kifupath = "./kifu";
-    // list up kifu
-    let dir = std::fs::read_dir(kifupath).unwrap();
-    let mut files = dir.filter_map(|entry| {
-        entry.ok().and_then(|e|
-            e.path().file_name().map(|n|
-                n.to_str().unwrap().to_string()
-            )
-        )}).collect::<Vec<String>>().iter().filter(|&fnm| {
-            fnm.contains("kifu")
-            // fnm.contains(".txt")
-        }).cloned().collect::<Vec<String>>();
-    // println!("{:?}", files);
-
-    files.sort();
-    let mut boards : Vec<(bitboard::BitBoard, i8, i8, i8, i8)> = Vec::new();
-    for fname in files.iter() {
-        let path = format!("kifu/{}", fname);
-        print!("{path}\r");
-        let content = std::fs::read_to_string(&path).unwrap();
-        let lines:Vec<&str> = content.split('\n').collect();
-        let kifu = kifu::Kifu::from(&lines);
-        for t in kifu.list.iter() {
-            let ban = bitboard::BitBoard::from(&t.rfen).unwrap();
-            let (fsb, fsw) = ban.fixedstones();
-
-            let ban90 = ban.rotate90();
-            let ban180 = ban.rotate180();
-            let ban270 = ban180.rotate90();
-            boards.push((ban, t.teban, fsb, fsw, kifu.score.unwrap()));
-            boards.push((ban90, t.teban, fsb, fsw, kifu.score.unwrap()));
-            boards.push((ban180, t.teban, fsb, fsw, kifu.score.unwrap()));
-            boards.push((ban270, t.teban, fsb, fsw, kifu.score.unwrap()));
-        }
-    }
-    println!();
-    let mut boards = loadkifu(&files);
+    let mut boards = loadkifu(&findfiles(kifupath));
     dedupboards(&mut boards);
 
     let input = tch::Tensor::from_slice(
