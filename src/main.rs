@@ -165,16 +165,22 @@ fn main() -> Result<(), tch::TchError> {
     params += &paramsfb;
     params += &paramsfw;
     // let keys = ["layer1.weight", "layer1.bias", "layer2.weight", "layer2.bias"];
-    let keys = ["layer1.bias", "layer2.weight", "layer2.bias"];
+    let keys = ["layer1.bias", "layer2.weight"];
     for key in keys {
         let l1w = weights.get(key).unwrap();
         println!("{key}:{:?}", l1w.size());
         let numel = l1w.numel();
         l1w.copy_data(outp.as_mut_slice(), numel);
-        params += ",";
         params += &outp[0..numel].iter()
             .map(|a| format!("{a}")).collect::<Vec<String>>().join(",");
+        params += ",";
     }
+    let l1w = weights.get("layer2.bias").unwrap();
+    println!("layer2.bias:{:?}", l1w.size());
+    let numel = l1w.numel();
+    l1w.copy_data(outp.as_mut_slice(), numel);
+    params += &outp[0..numel].iter()
+        .map(|a| format!("{a}")).collect::<Vec<String>>().join(",");
     println!("save to weight.txt");
     let mut f = std::fs::File::create("weights.txt").unwrap();
     f.write_all(params.as_bytes()).unwrap();
