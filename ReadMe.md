@@ -14,5 +14,6 @@ NO Warranty.
 * -e, --eta <ETA>          initial learning rate [default: 0.01]  
 * --epoch <EPOCH>          # of epochs [default: 100]  
 * --minibatch <MINIBATCH>  mini batch size [default: 16]  
+* -a, --anealing <ANEALING>  cosine anealing period [default: 0]  
 
 ---
