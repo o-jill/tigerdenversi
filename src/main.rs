@@ -185,7 +185,14 @@ fn main() -> Result<(), tch::TchError> {
         &extractscore(&boards)).view((boards.len() as i64, 1));
     println!("target: {} {:?}", target.dim(), target.size());
 
-    let mut vs = VarStore::new(Device::Cpu);
+    let device = if tch::utils::has_mps() {
+        Device::Mps      //  9h9m46s/100ep
+        // 2m36s/100ep/18907b
+    } else {
+        Device::Cpu      // 13m0s/100ep/1516288b
+        // 13s/100ep/18907b
+    };
+    let mut vs = VarStore::new(device);
     let nnet = net(&vs.root());
     if arg.weight.is_some() {
         println!("load weight: {}", arg.weight.as_ref().unwrap());
@@ -220,7 +227,7 @@ fn main() -> Result<(), tch::TchError> {
     } else {
         for ep in 0..arg.epoch {
             let mut dataset = Iter2::new(&input, &target, arg.minibatch);
-            let dataset = dataset.shuffle();
+            let dataset = dataset.shuffle().to_device(vs.device());
             // let mut loss = tch::Tensor::new();
             for (xs, ys) in dataset {
                 // println!("xs: {} {:?} ys: {} {:?}", xs.dim(), xs.size(), ys.dim(), ys.size());
