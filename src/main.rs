@@ -73,6 +73,8 @@ fn loadkifu(files : &[String]) -> Vec<(bitboard::BitBoard, i8, i8, i8, i8)> {
         let kifu = kifu::Kifu::from(&lines);
         for t in kifu.list.iter() {
             let ban = bitboard::BitBoard::from(&t.rfen).unwrap();
+            if ban.is_full() {continue;}
+
             let (fsb, fsw) = ban.fixedstones();
 
             let ban90 = ban.rotate90();
