@@ -33,6 +33,9 @@ struct Arg {
     /// cosine anealing period.
     #[arg(short, long, default_value_t = 0)]
     anealing : i32,
+    /// device to process. cuda, mps or cpu. default:cpu.
+    #[arg(long)]
+    device : Option<String>
 }
 
 fn net(vs : &nn::Path) -> impl Module {
@@ -187,9 +190,12 @@ fn main() -> Result<(), tch::TchError> {
         &extractscore(&boards)).view((boards.len() as i64, 1));
     println!("target: {} {:?}", target.dim(), target.size());
 
-    let device = if tch::utils::has_mps() {
+    let devtype = arg.device.unwrap_or("cpu".to_string());
+    let device = if devtype == "mps" && tch::utils::has_mps() {
         Device::Mps      //  9h9m46s/100ep
         // 2m36s/100ep/18907b
+    } else if devtype == "cuda" && tch::utils::has_cuda() {
+        Device::Cuda(0)
     } else {
         Device::Cpu      // 13m0s/100ep/1516288b
         // 13s/100ep/18907b
