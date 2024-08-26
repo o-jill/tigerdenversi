@@ -212,6 +212,10 @@ fn main() -> Result<(), tch::TchError> {
         println!("{key}:{:?}", t.size());
     }
     let period = arg.anealing;
+    println!("epoch:{}", arg.epoch);
+    println!("eta:{eta}");
+    println!("cosine aneaing:{period}");
+    println!("mini batch: {}", arg.minibatch);
     if period > 1 {
         for ep in 0..arg.epoch {
             optm.set_lr(
