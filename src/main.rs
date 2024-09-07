@@ -33,6 +33,9 @@ struct Arg {
     /// cosine anealing period.
     #[arg(short, long, default_value_t = 0)]
     anealing : i32,
+    /// device to process. cuda, mps or cpu. default:cpu.
+    #[arg(long)]
+    device : Option<String>
 }
 
 fn net(vs : &nn::Path) -> impl Module {
@@ -73,6 +76,8 @@ fn loadkifu(files : &[String]) -> Vec<(bitboard::BitBoard, i8, i8, i8, i8)> {
         let kifu = kifu::Kifu::from(&lines);
         for t in kifu.list.iter() {
             let ban = bitboard::BitBoard::from(&t.rfen).unwrap();
+            if ban.is_full() {continue;}
+
             let (fsb, fsw) = ban.fixedstones();
 
             let ban90 = ban.rotate90();
@@ -185,7 +190,17 @@ fn main() -> Result<(), tch::TchError> {
         &extractscore(&boards)).view((boards.len() as i64, 1));
     println!("target: {} {:?}", target.dim(), target.size());
 
-    let mut vs = VarStore::new(Device::Cpu);
+    let devtype = arg.device.unwrap_or("cpu".to_string());
+    let device = if devtype == "mps" && tch::utils::has_mps() {
+        Device::Mps      //  9h9m46s/100ep
+        // 2m36s/100ep/18907b
+    } else if devtype == "cuda" && tch::utils::has_cuda() {
+        Device::Cuda(0)
+    } else {
+        Device::Cpu      // 13m0s/100ep/1516288b
+        // 13s/100ep/18907b
+    };
+    let mut vs = VarStore::new(device);
     let nnet = net(&vs.root());
     if arg.weight.is_some() {
         println!("load weight: {}", arg.weight.as_ref().unwrap());
@@ -197,6 +212,10 @@ fn main() -> Result<(), tch::TchError> {
         println!("{key}:{:?}", t.size());
     }
     let period = arg.anealing;
+    println!("epoch:{}", arg.epoch);
+    println!("eta:{eta}");
+    println!("cosine aneaing:{period}");
+    println!("mini batch: {}", arg.minibatch);
     if period > 1 {
         for ep in 0..arg.epoch {
             optm.set_lr(
@@ -220,7 +239,7 @@ fn main() -> Result<(), tch::TchError> {
     } else {
         for ep in 0..arg.epoch {
             let mut dataset = Iter2::new(&input, &target, arg.minibatch);
-            let dataset = dataset.shuffle();
+            let dataset = dataset.shuffle().to_device(vs.device());
             // let mut loss = tch::Tensor::new();
             for (xs, ys) in dataset {
                 // println!("xs: {} {:?} ys: {} {:?}", xs.dim(), xs.size(), ys.dim(), ys.size());
