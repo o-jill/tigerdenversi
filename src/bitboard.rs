@@ -1,11 +1,15 @@
 pub const SENTE : i8 = 1;
 pub const BLANK : i8 = 0;
 pub const GOTE : i8 = -1;
+#[allow(dead_code)]
 pub const NONE : i8 = 127;
 pub const NUMCELL : usize = 8;
 pub const CELL_2D : usize = NUMCELL * NUMCELL;
+#[allow(dead_code)]
 const STR_SENTE : &str = "0ABCDEFGH";
+#[allow(dead_code)]
 pub const STR_GOTE : &str = "0abcdefgh";
+#[allow(dead_code)]
 const STR_NUM : &str = "012345678";
 pub const STONE_SENTE : &str = "@@";
 pub const STONE_GOTE : &str = "[]";
@@ -90,7 +94,7 @@ impl BitBoard {
 
     #[allow(dead_code)]
     pub fn from_obf(obf : &str) -> BitBoard {
-        let elem = obf.split(" ").collect::<Vec<_>>();
+        let elem = obf.split(' ').collect::<Vec<_>>();
         let mut ret = BitBoard {
             black : 0,
             white : 0,
@@ -121,6 +125,7 @@ impl BitBoard {
         ret
     }
 
+    #[allow(dead_code)]
     pub fn to_str(&self) -> String {
         let mut ban = Vec::<String>::new();
         let black = self.black;
@@ -168,6 +173,7 @@ impl BitBoard {
         }
     }
 
+    #[allow(dead_code)]
     // othello BitBoard file format
     // init:
     // ---------------------------XO------OX--------------------------- X
@@ -192,66 +198,7 @@ impl BitBoard {
         }
     }
 
-    pub fn to_id(&self)-> [u8 ; 16] {
-        let mut res : [u8 ; 16] = [0 ; 16];
-        let mut bit : u64 = LSB_CELL;
-        let black = self.black;
-        let white = self.white;
-        let tbn : u8 = if self.teban == SENTE { 0x00 } else { 0x80 };
-        let mut idx = 0;
-        for _y in 0..NUMCELL {
-            let mut id : u8 = 0;
-            for _x in 0..4 {
-                let cb = (bit & black) != 0;
-                let cw = (bit & white) != 0;
-                bit <<= 1;
-                let c = if cb {SENTE} else if cw {GOTE} else {BLANK};
-
-                id = id * 3 + (c + 1) as u8;
-            }
-            res[idx] = id | tbn;
-            idx += 1;
-
-            id = 0;
-            for _x in 0..4 {
-                let cb = (bit & black) != 0;
-                let cw = (bit & white) != 0;
-                bit <<= 1;
-                let c = if cb {SENTE} else if cw {GOTE} else {BLANK};
-
-                id = id * 3 + (c + 1) as u8;
-            }
-            res[idx] = id | tbn;
-            idx += 1;
-        }
-        res
-    }
-
-    pub fn to_id_simd(&self)-> [u8 ; 16] {
-        self.to_id()
-        // let mut res : [u8 ; 16] = [0 ; 16];
-        // let tbn : i8 = if self.teban == SENTE { 0x00 } else { -128 };
-        // unsafe {
-        //     let mut sum16 = x86_64::_mm_setzero_si128();
-        //     for i in 0..CELL_2D / 16 {
-        //         let ci816 = x86_64::_mm_load_si128(
-        //             self.cells[i * 16..].as_ptr() as *const x86_64::__m128i);
-        //         // -1 ~ +1 -> 0 ~ 2
-        //         let one16 = x86_64::_mm_set1_epi8(1);
-        //         let cu816 = x86_64::_mm_add_epi8(ci816, one16);
-
-        //         let three8 = x86_64::_mm_set1_epi16(3);
-        //         sum16 = x86_64::_mm_mullo_epi16(three8, sum16);
-        //         sum16 = x86_64::_mm_add_epi16(sum16, cu816);
-        //     }
-        //     let tbn16 = x86_64::_mm_set1_epi8(tbn);
-        //     let sum16 = x86_64::_mm_or_si128(tbn16, sum16);
-        //     x86_64::_mm_store_si128(
-        //         res.as_mut_ptr() as *mut x86_64::__m128i, sum16);
-        // }
-        // res
-    }
-
+    #[allow(dead_code)]
     pub fn put(&self) {
         let black = self.black;
         let white = self.white;
@@ -284,22 +231,28 @@ impl BitBoard {
         )
     }
 
+    #[allow(dead_code)]
     pub fn flipturn(&mut self) {
         self.teban = -self.teban;
     }
 
+    #[allow(dead_code)]
     pub fn resetpass(&mut self) {
         self.pass = 0;
     }
 
+    #[allow(dead_code)]
     pub fn pass(&mut self) {
         self.teban = -self.teban;
         self.pass += 1;
     }
 
+    #[allow(dead_code)]
     pub fn is_passpass(&self) -> bool {
         self.pass >= 2
     }
+
+    #[allow(dead_code)]
     pub fn clone(&self) -> BitBoard {
         BitBoard {
             black : self.black, white : self.white,
@@ -307,6 +260,7 @@ impl BitBoard {
         }
     }
 
+    #[allow(dead_code)]
     pub fn nblank(&self) -> u32 {
         (self.black | self.white).count_zeros()
     }
@@ -324,6 +278,7 @@ impl BitBoard {
         if cb {SENTE} else if cw {GOTE} else {BLANK}
     }
 
+    #[allow(dead_code)]
     pub fn isfilled(&self, x: u8, y: u8) -> bool {
         let bit : u64 = LSB_CELL << BitBoard::index(x as usize, y as usize);
         (bit & (self.black | self.white)) != 0
@@ -342,6 +297,7 @@ impl BitBoard {
         }
     }
 
+    #[allow(dead_code)]
     /**
      * x : 0~7
      * y : 0~7
@@ -521,6 +477,7 @@ impl BitBoard {
         }
     }
 
+    #[allow(dead_code)]
     pub fn checkreverse(&self, x : usize, y : usize) -> bool {
         let color = self.teban;
         let mine = if color == SENTE {self.black} else {self.white};
@@ -656,6 +613,7 @@ impl BitBoard {
         false
     }
 
+    #[allow(dead_code)]
     /**
      * @param x 0 : pass, 1 ~ 8 : column index.
      * @param y 0 : pass, 1 ~ 8 : row index.
@@ -680,6 +638,7 @@ impl BitBoard {
         Ok(ban)
     }
 
+    #[allow(dead_code)]
     /// # Returns
     /// - None : no empty cells.
     /// - Some(vec![])  : no available cells. pass.
@@ -713,10 +672,12 @@ impl BitBoard {
         Some(ret)
     }
 
+    #[allow(dead_code)]
     pub fn count(&self) -> i8 {
         self.black.count_ones() as i8 - self.white.count_ones() as i8
     }
 
+    #[allow(dead_code)]
     pub fn countf32(&self) -> f32 {
         (self.black.count_ones() as i8 - self.white.count_ones() as i8) as f32
     }

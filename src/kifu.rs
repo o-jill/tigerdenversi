@@ -1,9 +1,15 @@
 use super::*;
 
-pub const SENTEWIN : i8 = 1;
-pub const DRAW : i8 = 0;
-pub const GOTEWIN : i8 = -1;
+#[allow(dead_code)]
+#[derive(Debug, PartialEq)]
+pub enum Winner {
+    Sente = 1,
+    Draw = 0,
+    Gote = -1,
+}
+
 pub const STR_POSX : &str = "0abcdefgh";
+#[allow(dead_code)]
 pub const HEADER : &str = "# reversi kifu revision 1.0\n";
 
 pub struct Te {
@@ -24,7 +30,7 @@ impl Te {
     }
 
     pub fn from(line : &str) -> Option<Te> {
-        if line.starts_with("#") {
+        if line.starts_with('#') {
             return None;
         }
         let elem = line.split_whitespace().collect::<Vec<&str>>();
@@ -58,6 +64,7 @@ impl Te {
         format!("{}{}", STR_POSX.chars().nth(self.x).unwrap(), self.y)
     }
 
+    #[allow(dead_code)]
     pub fn to_str(&self, i : usize) -> String {
         format!(
             "{} {} {} {}\n",
@@ -146,7 +153,7 @@ impl Kifu {
         // score?
         let result = lines.last().unwrap();
         // println!("{:?}", result);
-        let score = result.split(" ").collect::<Vec<&str>>();
+        let score = result.split(' ').collect::<Vec<&str>>();
         let score = score.last().unwrap().parse::<i8>().unwrap_or(0);
         ret.winneris(score);
         // if result.find("SENTE won.").is_some() {
@@ -180,6 +187,7 @@ impl Kifu {
         self.list.push(Te::new(x, y, t, rfen));
     }
 
+    #[allow(dead_code)]
     pub fn to_str(&self) -> String {
         let lines = self.list.iter().enumerate().map(
             |(i, a)| a.to_str(i + 1)).collect::<Vec<String>>();
@@ -224,15 +232,16 @@ impl Kifu {
         self.score = Some(n);
     }
 
-    pub fn winner(&self) -> Option<i8> {
+    #[allow(dead_code)]
+    pub fn winner(&self) -> Option<Winner> {
         let score = self.score?;
         if score.is_positive() {
-            return Some(SENTEWIN);
+            return Some(Winner::Sente);
         }
         if score.is_negative() {
-            return Some(GOTEWIN);
+            return Some(Winner::Gote);
         }
-        Some(DRAW)
+        Some(Winner::Draw)
     }
 }
 
@@ -271,7 +280,7 @@ fn testkifu() {
     assert_eq!(te.teban, bitboard::SENTE);
     assert_eq!(te.rfen, "dD/AdC/BcC/BdB/DbB/AaAcA1/BcC/G1 b");
     assert_eq!(kifu.score, Some(4));
-    assert_eq!(kifu.winner(), Some(SENTEWIN));
+    assert_eq!(kifu.winner(), Some(Winner::Sente));
     assert_eq!(kifu.score2str(), "SENTE won. 4");
     let kifu2 = kifu.copy();
     assert_eq!(kifu.score, kifu2.score);
