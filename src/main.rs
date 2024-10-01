@@ -122,6 +122,9 @@ fn extractscore(boards : &[(bitboard::BitBoard, i8, i8, i8, i8)]) -> Vec<f32> {
     boards.iter().map(|(_b, _t, _fb, _fw, s)| *s as f32).collect::<Vec<f32>>()
 }
 
+// load from `fname` into `vs`.
+//
+// .safetensor and ruversi weight format are available.
 fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
     let path = std::path::Path::new(fname);
     if !path.exists() {
@@ -140,29 +143,29 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
         Err(e) => {return Err(e)},
         _ => {},
     }
+    const INPSIZE : usize = bitboard::CELL_2D + 1 + 2;
+    const HIDSIZE : usize =  HIDDENSIZE as usize;
     let wban = &txtweight.weight;
-    let wtbn = &wban[bitboard::CELL_2D * (HIDDENSIZE as usize)..];
-    let wfs = &wban[(bitboard::CELL_2D + 1) * (HIDDENSIZE as usize)..];
-    let wdc = &wban[(bitboard::CELL_2D + 1 + 2) * (HIDDENSIZE as usize)..(bitboard::CELL_2D + 1 + 2 + 1) * (HIDDENSIZE as usize)];
-    let whdn = &wban[(bitboard::CELL_2D + 1 + 2 + 1) * (HIDDENSIZE as usize)..(bitboard::CELL_2D + 1 + 2 + 1 + 1) * (HIDDENSIZE as usize)];
+    let wtbn = &wban[bitboard::CELL_2D * HIDSIZE..];
+    let wfs = &wban[(bitboard::CELL_2D + 1) * HIDSIZE..];
+    let wdc = &wban[INPSIZE * HIDSIZE..(INPSIZE + 1) * HIDSIZE];
+    let whdn = &wban[(INPSIZE + 1) * HIDSIZE..(INPSIZE + 1 + 1) * HIDSIZE];
     let wdc2 = wban.last().unwrap();
 
     // layer1.weight
-    let mut weights = [0.0f32 ; (bitboard::CELL_2D + 1 + 2) * (HIDDENSIZE as usize)];
+    let mut weights = [0.0f32 ; INPSIZE * HIDSIZE];
     for i in 0..HIDDENSIZE as usize {
-        weights[i * (bitboard::CELL_2D + 1 + 2)..i * (bitboard::CELL_2D + 1 + 2) + bitboard::CELL_2D].copy_from_slice(&wban[i * bitboard::CELL_2D .. i * bitboard::CELL_2D + bitboard::CELL_2D]);
-        weights[i * (bitboard::CELL_2D + 1 + 2) + bitboard::CELL_2D] = wtbn[i];
-        weights[i * (bitboard::CELL_2D + 1 + 2) + bitboard::CELL_2D + 1] = wfs[i];
-        weights[i * (bitboard::CELL_2D + 1 + 2) + bitboard::CELL_2D + 2] = wfs[i + HIDDENSIZE as usize];
+        weights[i * INPSIZE..i * INPSIZE + bitboard::CELL_2D].copy_from_slice(
+            &wban[i * bitboard::CELL_2D .. (i + 1) * bitboard::CELL_2D]);
+        weights[i * INPSIZE + bitboard::CELL_2D] = wtbn[i];
+        weights[i * INPSIZE + bitboard::CELL_2D + 1] = wfs[i];
+        weights[i * INPSIZE + bitboard::CELL_2D + 2] = wfs[i + HIDSIZE];
     }
     let wl1 = Tensor::from_slice(&weights).view((HIDDENSIZE, INPUTSIZE));
-    // let vl1w = vs.variables();
-    // let l1w = vl1w.get("layer1.weight").unwrap();
-    // println!("layer1.weight:{:?} == {:?}??", l1w.size(), wl1.size());
-    // if l1w.size() != wl1.size() {panic!("tensor size is different...");}
     {
         let mut val = vs.variables_.lock();
-        val.as_mut().unwrap().named_variables.insert(format!("layer1.weight"), wl1);
+        val.as_mut().unwrap().named_variables.insert(
+            format!("layer1.weight"), wl1);
     }
 
     // layer1.bias
@@ -171,7 +174,8 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
     let wb1 = Tensor::from_slice(&bias).view((1, HIDDENSIZE));
     {
         let mut val = vs.variables_.lock();
-        val.as_mut().unwrap().named_variables.insert(format!("layer1.bias"), wb1);
+        val.as_mut().unwrap().named_variables.insert(
+            format!("layer1.bias"), wb1);
     }
 
     // layer2.weight
@@ -180,7 +184,8 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
     let wl2 = Tensor::from_slice(&weights).view(HIDDENSIZE);
     {
         let mut val = vs.variables_.lock();
-        val.as_mut().unwrap().named_variables.insert(format!("layer2.weight"), wl2);
+        val.as_mut().unwrap().named_variables.insert(
+            format!("layer2.weight"), wl2);
     }
 
     // layer2.bias
@@ -189,7 +194,8 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
     let wb2 = Tensor::from_slice(&bias).view(1);
     {
         let mut val = vs.variables_.lock();
-        val.as_mut().unwrap().named_variables.insert(format!("layer2.bias"), wb2);
+        val.as_mut().unwrap().named_variables.insert(
+            format!("layer2.bias"), wb2);
     }
     Ok(())
 }
