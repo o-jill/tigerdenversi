@@ -249,7 +249,7 @@ fn storeweights(vs : VarStore) {
 
 fn epochspeed(
     ep : usize, maxepoch : usize, elapsed : std::time::Duration) -> String {
-        let epoch = ep + 1;
+    let epoch = ep + 1;
     let speed = elapsed.as_secs_f64() / (epoch) as f64;
 
     let etasecs = (maxepoch - epoch) as f64 * speed;
