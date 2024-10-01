@@ -139,10 +139,8 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
     }
 
     let mut txtweight = weight::Weight::new();
-    match txtweight.read(fname) {
-        Err(e) => {return Err(e)},
-        _ => {},
-    }
+    txtweight.read(fname)?;
+
     const INPSIZE : usize = bitboard::CELL_2D + 1 + 2;
     const HIDSIZE : usize =  HIDDENSIZE as usize;
     let wban = &txtweight.weight;
@@ -165,7 +163,7 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
     {
         let mut val = vs.variables_.lock();
         val.as_mut().unwrap().named_variables.insert(
-            format!("layer1.weight"), wl1);
+            "layer1.weight".to_string(), wl1);
     }
 
     // layer1.bias
@@ -175,7 +173,7 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
     {
         let mut val = vs.variables_.lock();
         val.as_mut().unwrap().named_variables.insert(
-            format!("layer1.bias"), wb1);
+            "layer1.bias".to_string(), wb1);
     }
 
     // layer2.weight
@@ -185,7 +183,7 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
     {
         let mut val = vs.variables_.lock();
         val.as_mut().unwrap().named_variables.insert(
-            format!("layer2.weight"), wl2);
+            "layer2.weight".to_string(), wl2);
     }
 
     // layer2.bias
@@ -195,7 +193,7 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
     {
         let mut val = vs.variables_.lock();
         val.as_mut().unwrap().named_variables.insert(
-            format!("layer2.bias"), wb2);
+            "layer2.bias".to_string(), wb2);
     }
     Ok(())
 }
@@ -283,10 +281,8 @@ fn main() -> Result<(), tch::TchError> {
     let nnet = net(&vs.root());
     if arg.weight.is_some() {
         println!("load weight: {}", arg.weight.as_ref().unwrap());
-        match load(arg.weight.as_ref().unwrap(), &mut vs) {
-            Err(e) => {panic!("{e}")},
-            _ => {}
-        }
+        if let Err(e) = load(
+            arg.weight.as_ref().unwrap(), &mut vs) {panic!("{e}")}
     }
     let eta = arg.eta;
     let mut optm = nn::AdamW::default().build(&vs, eta)?;

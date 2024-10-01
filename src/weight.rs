@@ -86,6 +86,7 @@ impl Weight {
         }
     }
 
+    #[allow(dead_code)]
     /// fill zero.
     pub fn clear(&mut self) {
         self.weight.iter_mut().for_each(|m| *m = 0.0);
@@ -110,7 +111,7 @@ impl Weight {
         for line in lines.lines() {
             match line {
                 Ok(l) => {
-                    if l.starts_with("#") {
+                    if l.starts_with('#') {
                         if format != EvalFile::Unknown {
                             continue;
                         }
@@ -146,7 +147,7 @@ impl Weight {
     }
 
     fn readv3(&mut self, line : &str) -> Result<(), String> {
-        let csv = line.split(",").collect::<Vec<_>>();
+        let csv = line.split(',').collect::<Vec<_>>();
         let newtable : Vec<f32> = csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
         let nsz = newtable.len();
         if WSZV3 != nsz {
@@ -158,7 +159,7 @@ impl Weight {
     }
 
     fn readv4(&mut self, line : &str) -> Result<(), String> {
-        let csv = line.split(",").collect::<Vec<_>>();
+        let csv = line.split(',').collect::<Vec<_>>();
         let newtable : Vec<f32> = csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
         let nsz = newtable.len();
         if WSZV4 != nsz {
@@ -170,7 +171,7 @@ impl Weight {
     }
 
     fn readv5(&mut self, line : &str) -> Result<(), String> {
-        let csv = line.split(",").collect::<Vec<_>>();
+        let csv = line.split(',').collect::<Vec<_>>();
         let newtable : Vec<f32> = csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
         let nsz = newtable.len();
         if WSZV5 != nsz {
@@ -182,7 +183,7 @@ impl Weight {
     }
 
     fn readv6(&mut self, line : &str) -> Result<(), String> {
-        let csv = line.split(",").collect::<Vec<_>>();
+        let csv = line.split(',').collect::<Vec<_>>();
         let newtable : Vec<f32> = csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
         let nsz = newtable.len();
         if WSZV6 != nsz {
@@ -195,8 +196,8 @@ impl Weight {
 
     fn write(f : &mut fs::File, w : &[f32], ver : &EvalFile) {
         let sv = w.iter().map(|a| a.to_string()).collect::<Vec<String>>();
-        f.write(format!("{}\n", ver.to_str()).as_bytes()).unwrap();
-        f.write(sv.join(",").as_bytes()).unwrap();
+        f.write_all(format!("{}\n", ver.to_str()).as_bytes()).unwrap();
+        f.write_all(sv.join(",").as_bytes()).unwrap();
     }
 
     #[allow(dead_code)]
@@ -223,16 +224,19 @@ impl Weight {
         Weight::write(&mut f, &self.weight, &EvalFile::V4);
     }
 
+    #[allow(dead_code)]
     pub fn writev5(&self, path : &str) {
         let mut f = fs::File::create(path).unwrap();
         Weight::write(&mut f, &self.weight, &EvalFile::V5);
     }
 
+    #[allow(dead_code)]
     pub fn writev6(&self, path : &str) {
         let mut f = fs::File::create(path).unwrap();
         Weight::write(&mut f, &self.weight, &EvalFile::V6);
     }
 
+    #[allow(dead_code)]
     pub fn writev1asv2(&self, path : &str) {
         let mut w = Weight::new();
         w.fromv1tov2(&self.weight);
@@ -240,6 +244,7 @@ impl Weight {
         Weight::write(&mut f, &self.weight, &EvalFile::V2);
     }
 
+    #[allow(dead_code)]
     pub fn writev2asv3(&self, path : &str) {
         let mut w = Weight::new();
         w.fromv2tov3(&self.weight);
@@ -247,6 +252,7 @@ impl Weight {
         Weight::write(&mut f, &self.weight, &EvalFile::V2);
     }
 
+    #[allow(dead_code)]
     pub fn copy(&mut self, src : &Weight) {
         for (d, s) in self.weight.iter_mut().zip(src.weight.iter()) {
             *d = *s;
@@ -387,7 +393,7 @@ impl Weight {
     }
 
     /// copy v3 data into v4.
-    fn convert(&mut self, tbl : &Vec<f32>, nhid : usize) {
+    fn convert(&mut self, tbl : &[f32], nhid : usize) {
         self.weight = [0.0 ; N_WEIGHT];
         // ban
         let n = nhid * bitboard::CELL_2D;
@@ -454,20 +460,21 @@ impl Weight {
     }
 
     /// copy v3 data into v6.
-    fn fromv3tov6(&mut self, tbl : &Vec<f32>) {
+    fn fromv3tov6(&mut self, tbl : &[f32]) {
         self.convert(tbl, 4);
     }
 
     /// copy v4 data into v6.
-    fn fromv4tov6(&mut self, tbl : &Vec<f32>) {
+    fn fromv4tov6(&mut self, tbl : &[f32]) {
         self.convert(tbl, 8);
     }
 
     /// copy v5 data into v6.
-    fn fromv5tov6(&mut self, tbl : &Vec<f32>) {
+    fn fromv5tov6(&mut self, tbl : &[f32]) {
         self.convert(tbl, 16);
     }
 
+    #[allow(dead_code)]
     pub fn evaluatev3bb(&self, ban : &bitboard::BitBoard) -> f32 {
         let black = ban.black;
         let white = ban.white;
