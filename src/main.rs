@@ -328,12 +328,16 @@ fn main() -> Result<(), tch::TchError> {
             let dataset = dataset.shuffle();
             // let mut loss = tch::Tensor::new();
             for (xs, ys) in dataset {
-                // println!("xs: {} {:?} ys: {} {:?}", xs.dim(), xs.size(), ys.dim(), ys.size());
-                let loss = nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                // println!("xs: {} {:?} ys: {} {:?}",
+                //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                let loss =
+                    nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
                 optm.backward_step(&loss);
             }
-            // let accu = nnet.batch_accuracy_for_logits(&input, &target, vs.device(), 400);
-            // println!("ep:{ep}, {}, {:.3}", loss.sum(Some(tch::Kind::Float)), accu * 100.00);
+            // let accu = nnet.batch_accuracy_for_logits(
+            //         &input, &target, vs.device(), 400);
+            // println!("ep:{ep}, {}, {:.3}",
+            //          loss.sum(Some(tch::Kind::Float)), accu * 100.00);
             let elapsed = start.elapsed();
             print!("{}", &epochspeed(ep, arg.epoch, elapsed));
             std::io::stdout().flush().unwrap();
@@ -344,12 +348,16 @@ fn main() -> Result<(), tch::TchError> {
             let dataset = dataset.shuffle().to_device(vs.device());
             // let mut loss = tch::Tensor::new();
             for (xs, ys) in dataset {
-                // println!("xs: {} {:?} ys: {} {:?}", xs.dim(), xs.size(), ys.dim(), ys.size());
-                let loss = nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                // println!("xs: {} {:?} ys: {} {:?}",
+                //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                let loss =
+                    nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
                 optm.backward_step(&loss);
             }
-            // let accu = nnet.batch_accuracy_for_logits(&input, &target, vs.device(), 400);
-            // println!("ep:{ep}, {}, {:.3}", loss.sum(Some(tch::Kind::Float)), accu * 100.00);
+            // let accu = nnet.batch_accuracy_for_logits(
+            //         &input, &target, vs.device(), 400);
+            // println!("ep:{ep}, {}, {:.3}",
+            //          loss.sum(Some(tch::Kind::Float)), accu * 100.00);
             let elapsed = start.elapsed();
             print!("{}", &epochspeed(ep, arg.epoch, elapsed));
             std::io::stdout().flush().unwrap();
