@@ -6,6 +6,7 @@ use tch::{Device, data::Iter2, Kind, Tensor};
 
 mod kifu;
 mod bitboard;
+mod weight;
 
 const INPUTSIZE :i64 = 8 * 8 + 1 + 2;
 const HIDDENSIZE : i64 = 16;
