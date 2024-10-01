@@ -247,6 +247,28 @@ fn storeweights(vs : VarStore) {
     f.write_all(params.as_bytes()).unwrap();
 }
 
+fn epochspeed(
+    ep : usize, maxepoch : usize, elapsed : std::time::Duration) -> String {
+        let epoch = ep + 1;
+    let speed = elapsed.as_secs_f64() / (epoch) as f64;
+
+    let etasecs = (maxepoch - epoch) as f64 * speed;
+
+    let esthour = (etasecs / 3600.0) as i32;
+    let estmin = ((etasecs - esthour as f64 * 3600.0) / 60.0) as i32;
+    let estsec = (etasecs % 60.0) as i32;
+
+    let mut res = format!("ep:{epoch}/{maxepoch} ");
+    res += &format!("ETA:{esthour:02}h{estmin:02}m{estsec:02}s ");
+    res + &if speed > 3600.0 {
+            format!("{:.1}hour/epoch\r", speed / 3600.0)
+        } else  if speed > 60.0 {
+            format!("{:.1}min/epoch\r", speed / 60.0)
+        } else {
+            format!("{speed:.1}sec/epoch\r")
+        }
+}
+
 fn main() -> Result<(), tch::TchError> {
     let t = Tensor::f_rand([1, 8, 8], (Kind::Float, Device::Cpu))?;
     // let t = Tensor::from_slice(&[3, 1, 4, 1, 5]);
@@ -294,6 +316,7 @@ fn main() -> Result<(), tch::TchError> {
     println!("eta:{eta}");
     println!("cosine aneaing:{period}");
     println!("mini batch: {}", arg.minibatch);
+    let start = std::time::Instant::now();
     if period > 1 {
         for ep in 0..arg.epoch {
             optm.set_lr(
@@ -311,7 +334,8 @@ fn main() -> Result<(), tch::TchError> {
             }
             // let accu = nnet.batch_accuracy_for_logits(&input, &target, vs.device(), 400);
             // println!("ep:{ep}, {}, {:.3}", loss.sum(Some(tch::Kind::Float)), accu * 100.00);
-            print!("ep:{ep} ");
+            let elapsed = start.elapsed();
+            print!("{}", &epochspeed(ep, arg.epoch, elapsed));
             std::io::stdout().flush().unwrap();
         }
     } else {
@@ -326,10 +350,12 @@ fn main() -> Result<(), tch::TchError> {
             }
             // let accu = nnet.batch_accuracy_for_logits(&input, &target, vs.device(), 400);
             // println!("ep:{ep}, {}, {:.3}", loss.sum(Some(tch::Kind::Float)), accu * 100.00);
-            print!("ep:{ep} ");
+            let elapsed = start.elapsed();
+            print!("{}", &epochspeed(ep, arg.epoch, elapsed));
             std::io::stdout().flush().unwrap();
         }
     }
+    println!();
 
     // VarStore to weights
     storeweights(vs);
