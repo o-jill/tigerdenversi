@@ -9,7 +9,7 @@ mod bitboard;
 mod weight;
 
 const INPUTSIZE :i64 = 8 * 8 + 1 + 2;
-const HIDDENSIZE : i64 = 16;
+const HIDDENSIZE : i64 = 32;
 // const MINIBATCH : i64 = 16;
 const MIN_COSANEAL : f64 = 1e-3;
 
