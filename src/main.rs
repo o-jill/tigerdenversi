@@ -6,10 +6,10 @@ use tch::{Device, data::Iter2, Kind, Tensor};
 
 mod kifu;
 mod bitboard;
+mod weight;
 
-const INPUTSIZE :i64 = 8 * 8 + 1 + 2;
-const HIDDENSIZE : i64 = 16;
-// const MINIBATCH : i64 = 16;
+const INPUTSIZE :i64 = weight::N_INPUT as i64;
+const HIDDENSIZE : i64 = weight::N_HIDDEN as i64;
 const MIN_COSANEAL : f64 = 1e-3;
 
 #[derive(Debug, Parser)]
@@ -121,6 +121,82 @@ fn extractscore(boards : &[(bitboard::BitBoard, i8, i8, i8, i8)]) -> Vec<f32> {
     boards.iter().map(|(_b, _t, _fb, _fw, s)| *s as f32).collect::<Vec<f32>>()
 }
 
+// load from `fname` into `vs`.
+//
+// .safetensor and ruversi weight format are available.
+fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
+    let path = std::path::Path::new(fname);
+    if !path.exists() {
+        return Err(format!("{fname} was not found..."));
+    }
+    if path.ends_with(".safetensors") {
+        println!("load weight: {}", fname);
+        match vs.load(path) {
+            Err(e) => {return Err(e.to_string())},
+            _ => {return Ok(());}
+        }
+    }
+
+    let mut txtweight = weight::Weight::new();
+    txtweight.read(fname)?;
+
+    const INPSIZE : usize = bitboard::CELL_2D + 1 + 2;
+    const HIDSIZE : usize =  HIDDENSIZE as usize;
+    let wban = &txtweight.weight;
+    let wtbn = &wban[bitboard::CELL_2D * HIDSIZE..];
+    let wfs = &wban[(bitboard::CELL_2D + 1) * HIDSIZE..];
+    let wdc = &wban[INPSIZE * HIDSIZE..(INPSIZE + 1) * HIDSIZE];
+    let whdn = &wban[(INPSIZE + 1) * HIDSIZE..(INPSIZE + 1 + 1) * HIDSIZE];
+    let wdc2 = wban.last().unwrap();
+
+    // layer1.weight
+    let mut weights = [0.0f32 ; INPSIZE * HIDSIZE];
+    for i in 0..HIDDENSIZE as usize {
+        weights[i * INPSIZE..i * INPSIZE + bitboard::CELL_2D].copy_from_slice(
+            &wban[i * bitboard::CELL_2D .. (i + 1) * bitboard::CELL_2D]);
+        weights[i * INPSIZE + bitboard::CELL_2D] = wtbn[i];
+        weights[i * INPSIZE + bitboard::CELL_2D + 1] = wfs[i];
+        weights[i * INPSIZE + bitboard::CELL_2D + 2] = wfs[i + HIDSIZE];
+    }
+    let wl1 = Tensor::from_slice(&weights).view((HIDDENSIZE, INPUTSIZE));
+    {
+        let mut val = vs.variables_.lock();
+        val.as_mut().unwrap().named_variables.insert(
+            "layer1.weight".to_string(), wl1);
+    }
+
+    // layer1.bias
+    let mut bias = [0.0f32 ; HIDDENSIZE as usize];
+    bias.copy_from_slice(wdc);
+    let wb1 = Tensor::from_slice(&bias).view((1, HIDDENSIZE));
+    {
+        let mut val = vs.variables_.lock();
+        val.as_mut().unwrap().named_variables.insert(
+            "layer1.bias".to_string(), wb1);
+    }
+
+    // layer2.weight
+    let mut weights = [0.0f32 ; HIDDENSIZE as usize];
+    weights.copy_from_slice(whdn);
+    let wl2 = Tensor::from_slice(&weights).view(HIDDENSIZE);
+    {
+        let mut val = vs.variables_.lock();
+        val.as_mut().unwrap().named_variables.insert(
+            "layer2.weight".to_string(), wl2);
+    }
+
+    // layer2.bias
+    let mut bias = [0.0f32 ; 1];
+    bias[0] = *wdc2;
+    let wb2 = Tensor::from_slice(&bias).view(1);
+    {
+        let mut val = vs.variables_.lock();
+        val.as_mut().unwrap().named_variables.insert(
+            "layer2.bias".to_string(), wb2);
+    }
+    Ok(())
+}
+
 fn storeweights(vs : VarStore) {
     println!("save to weight.safetensors");
     vs.save("weight.safetensors").unwrap();
@@ -128,7 +204,7 @@ fn storeweights(vs : VarStore) {
     // VarStore to weights
     let weights = vs.variables();
     let mut outp = [0.0f32 ; (INPUTSIZE * HIDDENSIZE) as usize];
-    let mut params = format!("# 64+1+2-{HIDDENSIZE}-1\n");
+    let mut params = weight::EvalFile::V6.to_str().to_string();
     let mut paramste = String::new();
     let mut paramsfb = String::new();
     let mut paramsfw = String::new();
@@ -170,6 +246,28 @@ fn storeweights(vs : VarStore) {
     f.write_all(params.as_bytes()).unwrap();
 }
 
+fn epochspeed(
+    ep : usize, maxepoch : usize, elapsed : std::time::Duration) -> String {
+    let epoch = ep + 1;
+    let speed = elapsed.as_secs_f64() / (epoch) as f64;
+
+    let etasecs = (maxepoch - epoch) as f64 * speed;
+
+    let esthour = (etasecs / 3600.0) as i32;
+    let estmin = ((etasecs - esthour as f64 * 3600.0) / 60.0) as i32;
+    let estsec = (etasecs % 60.0) as i32;
+
+    let mut res = format!("ep:{epoch}/{maxepoch} ");
+    res += &format!("ETA:{esthour:02}h{estmin:02}m{estsec:02}s ");
+    res + &if speed > 3600.0 {
+            format!("{:.1}hour/epoch\r", speed / 3600.0)
+        } else  if speed > 60.0 {
+            format!("{:.1}min/epoch\r", speed / 60.0)
+        } else {
+            format!("{speed:.1}sec/epoch\r")
+        }
+}
+
 fn main() -> Result<(), tch::TchError> {
     let t = Tensor::f_rand([1, 8, 8], (Kind::Float, Device::Cpu))?;
     // let t = Tensor::from_slice(&[3, 1, 4, 1, 5]);
@@ -204,7 +302,8 @@ fn main() -> Result<(), tch::TchError> {
     let nnet = net(&vs.root());
     if arg.weight.is_some() {
         println!("load weight: {}", arg.weight.as_ref().unwrap());
-        vs.load(arg.weight.as_ref().unwrap()).unwrap();
+        if let Err(e) = load(
+            arg.weight.as_ref().unwrap(), &mut vs) {panic!("{e}")}
     }
     let eta = arg.eta;
     let mut optm = nn::AdamW::default().build(&vs, eta)?;
@@ -216,6 +315,7 @@ fn main() -> Result<(), tch::TchError> {
     println!("eta:{eta}");
     println!("cosine aneaing:{period}");
     println!("mini batch: {}", arg.minibatch);
+    let start = std::time::Instant::now();
     if period > 1 {
         for ep in 0..arg.epoch {
             optm.set_lr(
@@ -227,13 +327,18 @@ fn main() -> Result<(), tch::TchError> {
             let dataset = dataset.shuffle();
             // let mut loss = tch::Tensor::new();
             for (xs, ys) in dataset {
-                // println!("xs: {} {:?} ys: {} {:?}", xs.dim(), xs.size(), ys.dim(), ys.size());
-                let loss = nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                // println!("xs: {} {:?} ys: {} {:?}",
+                //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                let loss =
+                    nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
                 optm.backward_step(&loss);
             }
-            // let accu = nnet.batch_accuracy_for_logits(&input, &target, vs.device(), 400);
-            // println!("ep:{ep}, {}, {:.3}", loss.sum(Some(tch::Kind::Float)), accu * 100.00);
-            print!("ep:{ep} ");
+            // let accu = nnet.batch_accuracy_for_logits(
+            //         &input, &target, vs.device(), 400);
+            // println!("ep:{ep}, {}, {:.3}",
+            //          loss.sum(Some(tch::Kind::Float)), accu * 100.00);
+            let elapsed = start.elapsed();
+            print!("{}", &epochspeed(ep, arg.epoch, elapsed));
             std::io::stdout().flush().unwrap();
         }
     } else {
@@ -242,16 +347,22 @@ fn main() -> Result<(), tch::TchError> {
             let dataset = dataset.shuffle().to_device(vs.device());
             // let mut loss = tch::Tensor::new();
             for (xs, ys) in dataset {
-                // println!("xs: {} {:?} ys: {} {:?}", xs.dim(), xs.size(), ys.dim(), ys.size());
-                let loss = nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                // println!("xs: {} {:?} ys: {} {:?}",
+                //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                let loss =
+                    nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
                 optm.backward_step(&loss);
             }
-            // let accu = nnet.batch_accuracy_for_logits(&input, &target, vs.device(), 400);
-            // println!("ep:{ep}, {}, {:.3}", loss.sum(Some(tch::Kind::Float)), accu * 100.00);
-            print!("ep:{ep} ");
+            // let accu = nnet.batch_accuracy_for_logits(
+            //         &input, &target, vs.device(), 400);
+            // println!("ep:{ep}, {}, {:.3}",
+            //          loss.sum(Some(tch::Kind::Float)), accu * 100.00);
+            let elapsed = start.elapsed();
+            print!("{}", &epochspeed(ep, arg.epoch, elapsed));
             std::io::stdout().flush().unwrap();
         }
     }
+    println!();
 
     // VarStore to weights
     storeweights(vs);

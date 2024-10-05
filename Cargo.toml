@@ -6,4 +6,5 @@ description = "training program for ruversi."
 
 [dependencies]
 clap = { version = "4.5.11", features = ["derive"] }
+rand = "0.8.5"
 tch = {version = "0.16.0", features = ["download-libtorch"]}
