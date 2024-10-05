@@ -8,9 +8,8 @@ mod kifu;
 mod bitboard;
 mod weight;
 
-const INPUTSIZE :i64 = 8 * 8 + 1 + 2;
-const HIDDENSIZE : i64 = 32;
-// const MINIBATCH : i64 = 16;
+const INPUTSIZE :i64 = weight::N_INPUT as i64;
+const HIDDENSIZE : i64 = weight::N_HIDDEN as i64;
 const MIN_COSANEAL : f64 = 1e-3;
 
 #[derive(Debug, Parser)]
@@ -205,7 +204,7 @@ fn storeweights(vs : VarStore) {
     // VarStore to weights
     let weights = vs.variables();
     let mut outp = [0.0f32 ; (INPUTSIZE * HIDDENSIZE) as usize];
-    let mut params = format!("# 64+1+2-{HIDDENSIZE}-1\n");
+    let mut params = weight::EvalFile::V6.to_str().to_string();
     let mut paramste = String::new();
     let mut paramsfb = String::new();
     let mut paramsfw = String::new();

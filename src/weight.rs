@@ -7,8 +7,8 @@ use std::{fs, io::{BufReader, BufRead}};
  * hidden: 8 + 1
  * output: 1
  */
-const N_INPUT : usize = bitboard::CELL_2D + 1 + 2;
-const N_HIDDEN : usize = 32;
+pub const N_INPUT : usize = bitboard::CELL_2D + 1 + 2;
+pub const N_HIDDEN : usize = 32;
 const N_OUTPUT : usize = 1;
 pub const N_WEIGHT: usize = (N_INPUT + 1) * N_HIDDEN + N_HIDDEN + 1;
 
@@ -28,7 +28,7 @@ const WSZV6 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * N_HIDDEN + N_HIDDEN + 1;
 // val:-3.506 val:Some(-3.5055861), 334278 nodes. @@c3[]c2@@d1[]c1@@b1[]a4@@a2 80msec
 
 #[derive(PartialEq)]
-enum EvalFile{
+pub enum EvalFile{
     Unknown,
     V1,
     V2,
