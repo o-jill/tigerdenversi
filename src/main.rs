@@ -204,7 +204,7 @@ fn storeweights(vs : VarStore) {
     // VarStore to weights
     let weights = vs.variables();
     let mut outp = [0.0f32 ; (INPUTSIZE * HIDDENSIZE) as usize];
-    let mut params = weight::EvalFile::V6.to_str().to_string();
+    let mut params = weight::EvalFile::V6.to_str().to_string() + "\n";
     let mut paramste = String::new();
     let mut paramsfb = String::new();
     let mut paramsfw = String::new();
