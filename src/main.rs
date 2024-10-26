@@ -129,12 +129,13 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
     if !path.exists() {
         return Err(format!("{fname} was not found..."));
     }
-    if path.ends_with(".safetensors") {
+    if fname.ends_with(".safetensors") {
         println!("load weight: {}", fname);
-        match vs.load(path) {
-            Err(e) => {return Err(e.to_string())},
-            _ => {return Ok(());}
+        if let Err(e) = vs.load(fname) {
+            return Err(e.to_string());
         }
+
+        return Ok(());
     }
 
     let mut txtweight = weight::Weight::new();
