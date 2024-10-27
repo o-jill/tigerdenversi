@@ -121,6 +121,12 @@ fn extractscore(boards : &[(bitboard::BitBoard, i8, i8, i8, i8)]) -> Vec<f32> {
     boards.iter().map(|(_b, _t, _fb, _fw, s)| *s as f32).collect::<Vec<f32>>()
 }
 
+fn loadtensor(vs : &mut VarStore, key : &str, src : &Tensor) {
+    let mut val = vs.variables_.lock();
+    let s = val.as_mut().unwrap().named_variables.get_mut(key).unwrap();
+    s.set_data(src);
+}
+
 // load from `fname` into `vs`.
 //
 // .safetensor and ruversi weight format are available.
@@ -129,12 +135,13 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
     if !path.exists() {
         return Err(format!("{fname} was not found..."));
     }
-    if path.ends_with(".safetensors") {
+    if fname.ends_with(".safetensors") {
         println!("load weight: {}", fname);
-        match vs.load(path) {
-            Err(e) => {return Err(e.to_string())},
-            _ => {return Ok(());}
+        if let Err(e) = vs.load(fname) {
+            return Err(e.to_string());
         }
+
+        return Ok(());
     }
 
     let mut txtweight = weight::Weight::new();
@@ -159,41 +166,26 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
         weights[i * INPSIZE + bitboard::CELL_2D + 2] = wfs[i + HIDSIZE];
     }
     let wl1 = Tensor::from_slice(&weights).view((HIDDENSIZE, INPUTSIZE));
-    {
-        let mut val = vs.variables_.lock();
-        val.as_mut().unwrap().named_variables.insert(
-            "layer1.weight".to_string(), wl1);
-    }
+    loadtensor(vs, "layer1.weight", &wl1);
 
     // layer1.bias
     let mut bias = [0.0f32 ; HIDDENSIZE as usize];
     bias.copy_from_slice(wdc);
-    let wb1 = Tensor::from_slice(&bias).view((1, HIDDENSIZE));
-    {
-        let mut val = vs.variables_.lock();
-        val.as_mut().unwrap().named_variables.insert(
-            "layer1.bias".to_string(), wb1);
-    }
+    let wb1 = Tensor::from_slice(&bias).view(HIDDENSIZE);
+    loadtensor(vs, "layer1.bias", &wb1);
 
     // layer2.weight
     let mut weights = [0.0f32 ; HIDDENSIZE as usize];
     weights.copy_from_slice(whdn);
-    let wl2 = Tensor::from_slice(&weights).view(HIDDENSIZE);
-    {
-        let mut val = vs.variables_.lock();
-        val.as_mut().unwrap().named_variables.insert(
-            "layer2.weight".to_string(), wl2);
-    }
+    let wl2 = Tensor::from_slice(&weights).view((1, HIDDENSIZE));
+    loadtensor(vs, "layer2.weight", &wl2);
 
     // layer2.bias
     let mut bias = [0.0f32 ; 1];
     bias[0] = *wdc2;
     let wb2 = Tensor::from_slice(&bias).view(1);
-    {
-        let mut val = vs.variables_.lock();
-        val.as_mut().unwrap().named_variables.insert(
-            "layer2.bias".to_string(), wb2);
-    }
+    loadtensor(vs, "layer2.bias", &wb2);
+
     Ok(())
 }
 
@@ -204,7 +196,7 @@ fn storeweights(vs : VarStore) {
     // VarStore to weights
     let weights = vs.variables();
     let mut outp = [0.0f32 ; (INPUTSIZE * HIDDENSIZE) as usize];
-    let mut params = weight::EvalFile::V6.to_str().to_string();
+    let mut params = weight::EvalFile::V6.to_str().to_string() + "\n";
     let mut paramste = String::new();
     let mut paramsfb = String::new();
     let mut paramsfw = String::new();
