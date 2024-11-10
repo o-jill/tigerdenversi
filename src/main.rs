@@ -1,8 +1,8 @@
 use std::io::Write;
 
 use clap::Parser;
-use tch::{nn, nn::{Module, OptimizerConfig, VarStore}};
-use tch::{Device, data::Iter2, Kind, Tensor};
+use tch::nn::{self, Module, OptimizerConfig, VarStore};
+use tch::{Device, data::Iter2, Tensor};
 
 mod kifu;
 mod bitboard;
@@ -261,11 +261,6 @@ fn epochspeed(
 }
 
 fn main() -> Result<(), tch::TchError> {
-    let t = Tensor::f_rand([1, 8, 8], (Kind::Float, Device::Cpu))?;
-    // let t = Tensor::from_slice(&[3, 1, 4, 1, 5]);
-    let t = t * 2;
-    t.print();
-
     let arg = Arg::parse();
 
     let kifupath = "./kifu";
@@ -292,10 +287,10 @@ fn main() -> Result<(), tch::TchError> {
     };
     let mut vs = VarStore::new(device);
     let nnet = net(&vs.root());
-    if arg.weight.is_some() {
-        println!("load weight: {}", arg.weight.as_ref().unwrap());
+    if let Some(awei) = arg.weight {
+        println!("load weight from {}", &awei);
         if let Err(e) = load(
-            arg.weight.as_ref().unwrap(), &mut vs) {panic!("{e}")}
+            &awei, &mut vs) {panic!("{e}")}
     }
     let eta = arg.eta;
     let mut optm = nn::AdamW::default().build(&vs, eta)?;
