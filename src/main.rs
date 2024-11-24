@@ -35,7 +35,10 @@ struct Arg {
     anealing : i32,
     /// device to process. cuda, mps or cpu. default:cpu.
     #[arg(long)]
-    device : Option<String>
+    device : Option<String>,
+    /// weight decay
+    #[arg(long, default_value_t = 0.0002)]
+    wdecay : f64,
 }
 
 fn net(vs : &nn::Path) -> impl Module {
@@ -294,6 +297,7 @@ fn main() -> Result<(), tch::TchError> {
     }
     let eta = arg.eta;
     let mut optm = nn::AdamW::default().build(&vs, eta)?;
+    optm.set_weight_decay(arg.wdecay);
     for (key, t) in vs.variables().iter_mut() {
         println!("{key}:{:?}", t.size());
     }
@@ -302,6 +306,7 @@ fn main() -> Result<(), tch::TchError> {
     println!("eta:{eta}");
     println!("cosine aneaing:{period}");
     println!("mini batch: {}", arg.minibatch);
+    println!("weight decay:{}", arg.wdecay);
     let start = std::time::Instant::now();
     if period > 1 {
         for ep in 0..arg.epoch {
