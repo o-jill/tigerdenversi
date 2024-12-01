@@ -10,6 +10,7 @@ mod weight;
 
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
 const HIDDENSIZE : i64 = weight::N_HIDDEN as i64;
+const HIDDENSIZE2 : i64 = weight::N_HIDDEN2 as i64;
 const MIN_COSANEAL : f64 = 1e-3;
 
 #[derive(Debug, Parser)]
@@ -48,7 +49,11 @@ fn net(vs : &nn::Path) -> impl Module {
             INPUTSIZE, HIDDENSIZE, Default::default()))
             // INPUTSIZE, HIDDENSIZE, LinearConfig{ws_init:tch::nn::Init::set(self, tensor)}))
         .add_fn(|xs| xs.sigmoid())
-        .add(nn::linear(vs / "layer2", HIDDENSIZE, 1, Default::default()))
+        .add(
+            nn::linear(vs / "layer2",
+             HIDDENSIZE, HIDDENSIZE2, Default::default()))
+        .add_fn(|xs| xs.sigmoid())
+        .add(nn::linear(vs / "layer3", HIDDENSIZE2, 1, Default::default()))
 }
 
 // list up kifu
@@ -152,12 +157,14 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
 
     const INPSIZE : usize = bitboard::CELL_2D + 1 + 2;
     const HIDSIZE : usize =  HIDDENSIZE as usize;
-    let wban = &txtweight.weight;
-    let wtbn = &wban[bitboard::CELL_2D * HIDSIZE..];
-    let wfs = &wban[(bitboard::CELL_2D + 1) * HIDSIZE..];
-    let wdc = &wban[INPSIZE * HIDSIZE..(INPSIZE + 1) * HIDSIZE];
-    let whdn = &wban[(INPSIZE + 1) * HIDSIZE..(INPSIZE + 1 + 1) * HIDSIZE];
-    let wdc2 = wban.last().unwrap();
+    let wban = txtweight.wban();
+    let wtbn = txtweight.wteban();
+    let wfs = txtweight.wfixedstones();
+    let wdc = txtweight.wibias();
+    let whdn = txtweight.wlayer1();
+    let wdc2 = txtweight.wl1bias();
+    let whdn2 = txtweight.wlayer2();
+    let wdc3 = txtweight.wl2bias();
 
     // layer1.weight
     let mut weights = [0.0f32 ; INPSIZE * HIDSIZE];
@@ -178,16 +185,27 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
     loadtensor(vs, "layer1.bias", &wb1);
 
     // layer2.weight
-    let mut weights = [0.0f32 ; HIDDENSIZE as usize];
+    let mut weights = [0.0f32 ; (HIDDENSIZE2 * HIDDENSIZE) as usize];
     weights.copy_from_slice(whdn);
-    let wl2 = Tensor::from_slice(&weights).view((1, HIDDENSIZE));
+    let wl2 = Tensor::from_slice(&weights).view((HIDDENSIZE2, HIDDENSIZE));
     loadtensor(vs, "layer2.weight", &wl2);
 
     // layer2.bias
-    let mut bias = [0.0f32 ; 1];
-    bias[0] = *wdc2;
+    let mut bias = [0.0f32 ; HIDDENSIZE2 as usize];
+    bias.copy_from_slice(wdc2);
+    let wb1 = Tensor::from_slice(&bias).view(HIDDENSIZE2);
+    loadtensor(vs, "layer2.bias", &wb1);
+
+    // layer3.weight
+    let mut weights = [0.0f32 ; HIDDENSIZE2 as usize];
+    weights.copy_from_slice(whdn2);
+    let wl2 = Tensor::from_slice(&weights).view((1, HIDDENSIZE2));
+    loadtensor(vs, "layer3.weight", &wl2);
+
+    // layer3.bias
+    let bias = [wdc3 ; 1];
     let wb2 = Tensor::from_slice(&bias).view(1);
-    loadtensor(vs, "layer2.bias", &wb2);
+    loadtensor(vs, "layer3.bias", &wb2);
 
     Ok(())
 }
@@ -199,7 +217,7 @@ fn storeweights(vs : VarStore) {
     // VarStore to weights
     let weights = vs.variables();
     let mut outp = [0.0f32 ; (INPUTSIZE * HIDDENSIZE) as usize];
-    let mut params = weight::EvalFile::V6.to_str().to_string() + "\n";
+    let mut params = weight::EvalFile::V7.to_str().to_string() + "\n";
     let mut paramste = String::new();
     let mut paramsfb = String::new();
     let mut paramsfw = String::new();
@@ -220,7 +238,9 @@ fn storeweights(vs : VarStore) {
     params += &paramsfb;
     params += &paramsfw;
     // let keys = ["layer1.weight", "layer1.bias", "layer2.weight", "layer2.bias"];
-    let keys = ["layer1.bias", "layer2.weight"];
+    let keys = [
+        "layer1.bias", "layer2.weight", "layer2.bias", "layer3.weight"
+    ];
     for key in keys {
         let l1w = weights.get(key).unwrap();
         println!("{key}:{:?}", l1w.size());
@@ -230,8 +250,8 @@ fn storeweights(vs : VarStore) {
             .map(|a| format!("{a}")).collect::<Vec<String>>().join(",");
         params += ",";
     }
-    let l1w = weights.get("layer2.bias").unwrap();
-    println!("layer2.bias:{:?}", l1w.size());
+    let l1w = weights.get("layer3.bias").unwrap();
+    println!("layer3.bias:{:?}", l1w.size());
     let numel = l1w.numel();
     l1w.copy_data(outp.as_mut_slice(), numel);
     params += &outp[0..numel].iter()
