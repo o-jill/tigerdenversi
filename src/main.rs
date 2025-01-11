@@ -290,11 +290,11 @@ fn epochspeed(
     let mut res = format!("ep:{epoch:4}/{maxepoch} loss:{loss:.3} ");
     res += &format!("ETA:{esthour:02}h{estmin:02}m{estsec:02}s ");
     res + &if speed > 3600.0 {
-            format!("{:.1}hour/epoch\n", speed / 3600.0)
+            format!("{:.1}hour/epoch\r", speed / 3600.0)
         } else  if speed > 60.0 {
-            format!("{:.1}min/epoch\n", speed / 60.0)
+            format!("{:.1}min/epoch\r", speed / 60.0)
         } else {
-            format!("{speed:.1}sec/epoch\n")
+            format!("{speed:.1}sec/epoch\r")
         }
 }
 
