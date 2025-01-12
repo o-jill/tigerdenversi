@@ -1,6 +1,7 @@
 use std::io::Write;
 
 use clap::Parser;
+use rand::seq::SliceRandom;
 use tch::nn::{self, Module, OptimizerConfig, VarStore};
 use tch::{Device, data::Iter2, Tensor};
 
@@ -40,6 +41,9 @@ struct Arg {
     /// weight decay
     #[arg(long, default_value_t = 0.0002)]
     wdecay : f64,
+    /// ratio of test data for calc loss
+    #[arg(long, default_value_t = 0.2)]
+    testratio : f64,
 }
 
 fn net(vs : &nn::Path) -> impl Module {
@@ -107,6 +111,17 @@ fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8, i8, i8, i8)>) {
     });
     boards.dedup_by(|a, b| {a == b});
     println!("board: {} boards", boards.len());
+}
+
+fn picktrains(boards : &Vec<(bitboard::BitBoard, i8, i8, i8, i8)>, test_rate : f64)
+    -> (Vec<(bitboard::BitBoard, i8, i8, i8, i8)>,
+        Vec<(bitboard::BitBoard, i8, i8, i8, i8)>) {
+    let test_size = (boards.len() as f64 * test_rate) as usize;
+    let mut tmp = boards.clone();
+    let mut rng = rand::thread_rng();
+    tmp.shuffle(&mut rng);
+    let tests = tmp.drain(0..test_size).collect();
+    (tmp, tests)
 }
 
 fn extractboards(boards : &[(bitboard::BitBoard, i8, i8, i8, i8)])
@@ -262,7 +277,7 @@ fn storeweights(vs : VarStore) {
 }
 
 fn epochspeed(
-    ep : usize, maxepoch : usize, elapsed : std::time::Duration) -> String {
+    ep : usize, maxepoch : usize, loss : f64, elapsed : std::time::Duration) -> String {
     let epoch = ep + 1;
     let speed = elapsed.as_secs_f64() / (epoch) as f64;
 
@@ -272,7 +287,7 @@ fn epochspeed(
     let estmin = ((etasecs - esthour as f64 * 3600.0) / 60.0) as i32;
     let estsec = (etasecs % 60.0) as i32;
 
-    let mut res = format!("ep:{epoch}/{maxepoch} ");
+    let mut res = format!("ep:{epoch:4}/{maxepoch} loss:{loss:.3} ");
     res += &format!("ETA:{esthour:02}h{estmin:02}m{estsec:02}s ");
     res + &if speed > 3600.0 {
             format!("{:.1}hour/epoch\r", speed / 3600.0)
@@ -289,13 +304,19 @@ fn main() -> Result<(), tch::TchError> {
     let kifupath = "./kifu";
     let mut boards = loadkifu(&findfiles(kifupath));
     dedupboards(&mut boards);
+    let test_rate = arg.testratio;
+    let (boards, tests) = picktrains(&boards, test_rate);
 
     let input = tch::Tensor::from_slice(
         &extractboards(&boards)).view((boards.len() as i64, INPUTSIZE));
+    let testsin = tch::Tensor::from_slice(
+        &extractboards(&tests)).view((tests.len() as i64, INPUTSIZE));
     println!("input : {} {:?}", input.dim(), input.size());
 
     let target = tch::Tensor::from_slice(
         &extractscore(&boards)).view((boards.len() as i64, 1));
+    let testtarget = tch::Tensor::from_slice(
+        &extractscore(&tests)).view((tests.len() as i64, 1));
     println!("target: {} {:?}", target.dim(), target.size());
 
     let devtype = arg.device.unwrap_or("cpu".to_string());
@@ -327,6 +348,7 @@ fn main() -> Result<(), tch::TchError> {
     println!("cosine aneaing:{period}");
     println!("mini batch: {}", arg.minibatch);
     println!("weight decay:{}", arg.wdecay);
+    println!("test ratio:{test_rate:.3}");
     let start = std::time::Instant::now();
     if period > 1 {
         for ep in 0..arg.epoch {
@@ -345,12 +367,15 @@ fn main() -> Result<(), tch::TchError> {
                     nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
                 optm.backward_step(&loss);
             }
-            // let accu = nnet.batch_accuracy_for_logits(
-            //         &input, &target, vs.device(), 400);
-            // println!("ep:{ep}, {}, {:.3}",
-            //          loss.sum(Some(tch::Kind::Float)), accu * 100.00);
+            let testloss = if test_rate == 0.0 {
+                    0f64
+                } else {
+                    let loss = nnet.forward(&testsin)
+                            .mse_loss(&testtarget, tch::Reduction::Mean);
+                    loss.double_value(&[])
+                };
             let elapsed = start.elapsed();
-            print!("{}", &epochspeed(ep, arg.epoch, elapsed));
+            print!("{}", &epochspeed(ep, arg.epoch, testloss, elapsed));
             std::io::stdout().flush().unwrap();
         }
     } else {
@@ -365,12 +390,15 @@ fn main() -> Result<(), tch::TchError> {
                     nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
                 optm.backward_step(&loss);
             }
-            // let accu = nnet.batch_accuracy_for_logits(
-            //         &input, &target, vs.device(), 400);
-            // println!("ep:{ep}, {}, {:.3}",
-            //          loss.sum(Some(tch::Kind::Float)), accu * 100.00);
+            let testloss = if test_rate == 0.0 {
+                    0f64
+                } else {
+                    let loss = nnet.forward(&testsin)
+                            .mse_loss(&testtarget, tch::Reduction::Mean);
+                    loss.double_value(&[])
+                };
             let elapsed = start.elapsed();
-            print!("{}", &epochspeed(ep, arg.epoch, elapsed));
+            print!("{}", &epochspeed(ep, arg.epoch, testloss, elapsed));
             std::io::stdout().flush().unwrap();
         }
     }
