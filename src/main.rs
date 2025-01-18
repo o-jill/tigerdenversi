@@ -355,7 +355,7 @@ fn main() -> Result<(), tch::TchError> {
             optm.set_lr(
                 eta * MIN_COSANEAL +
                     eta * 0.5 * (1.0 - MIN_COSANEAL)
-                        * (1.0 + (ep as f64 / period as f64).cos())
+                        * (1.0 + (std::f64::consts::PI * (ep as i32 % period) as f64 / (period - 1) as f64).cos())
             );
             let mut dataset = Iter2::new(&input, &target, arg.minibatch);
             let dataset = dataset.shuffle();
