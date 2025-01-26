@@ -350,8 +350,8 @@ fn main() -> Result<(), tch::TchError> {
                 if i == iloss {continue;}
 
                 let mut dataset = Iter2::new(inp, tar, arg.minibatch);
-                let dataset = dataset.shuffle();
-                // let dataset = dataset.shuffle().to_device(vs.device());
+                // let dataset = dataset.shuffle();
+                let dataset = dataset.shuffle().to_device(vs.device());
                 for (xs, ys) in dataset {
                     // println!("xs: {} {:?} ys: {} {:?}",
                     //          xs.dim(), xs.size(), ys.dim(), ys.size());
@@ -373,23 +373,29 @@ fn main() -> Result<(), tch::TchError> {
         }
     } else {
         for ep in 0..arg.epoch {
-            let mut dataset = Iter2::new(&input, &target, arg.minibatch);
-            let dataset = dataset.shuffle().to_device(vs.device());
-            // let mut loss = tch::Tensor::new();
-            for (xs, ys) in dataset {
-                // println!("xs: {} {:?} ys: {} {:?}",
-                //          xs.dim(), xs.size(), ys.dim(), ys.size());
-                let loss =
-                    nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
-                optm.backward_step(&loss);
+            let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
+            for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
+                if i == iloss {continue;}
+
+                let mut dataset = Iter2::new(&inp, &tar, arg.minibatch);
+                // let dataset = dataset.shuffle();
+                let dataset = dataset.shuffle().to_device(vs.device());
+                // let mut loss = tch::Tensor::new();
+                for (xs, ys) in dataset {
+                    // println!("xs: {} {:?} ys: {} {:?}",
+                    //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                    let loss =
+                        nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                    optm.backward_step(&loss);
+                }
             }
-            let testloss = if test_rate == 0.0 {
-                    0f64
-                } else {
-                    let loss = nnet.forward(&testsin)
-                            .mse_loss(&testtarget, tch::Reduction::Mean);
-                    loss.double_value(&[])
-                };
+            let testloss = if testratio == 0 {
+                0f64
+            } else {
+                let loss = nnet.forward(&inputs[iloss])
+                        .mse_loss(&targets[iloss], tch::Reduction::Mean);
+                loss.double_value(&[])
+            };
             let elapsed = start.elapsed();
             print!("{}", &epochspeed(ep, arg.epoch, testloss, elapsed));
             std::io::stdout().flush().unwrap();
