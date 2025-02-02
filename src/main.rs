@@ -385,7 +385,7 @@ fn main() -> Result<(), tch::TchError> {
             for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
                 if i == iloss {continue;}
 
-                let mut dataset = Iter2::new(&inp, &tar, arg.minibatch);
+                let mut dataset = Iter2::new(inp, tar, arg.minibatch);
                 // let dataset = dataset.shuffle();
                 let dataset = dataset.shuffle().to_device(vs.device());
                 // let mut loss = tch::Tensor::new();
