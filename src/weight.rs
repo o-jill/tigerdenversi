@@ -204,15 +204,15 @@ impl Weight {
         Err(String::from("v2 format is not supported any more."))
     }
 
-    fn readv3(&mut self, line : &str) -> Result<(), String> {
+    fn readv3(&mut self, _line : &str) -> Result<(), String> {
         Err(String::from("v2 format is not supported any more."))
     }
 
-    fn readv4(&mut self, line : &str) -> Result<(), String> {
+    fn readv4(&mut self, _line : &str) -> Result<(), String> {
         Err(String::from("v2 format is not supported any more."))
     }
 
-    fn readv5(&mut self, line : &str) -> Result<(), String> {
+    fn readv5(&mut self, _line : &str) -> Result<(), String> {
         Err(String::from("v2 format is not supported any more."))
     }
 

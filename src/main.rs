@@ -26,6 +26,9 @@ struct Arg {
     /// # of epochs
     #[arg(long, default_value_t = 100)]
     epoch : usize,
+    /// kifu directory
+    #[arg(long)]
+    kifudir : Option<String>,
     /// mini batch size
     #[arg(long, default_value_t = 16)]
     minibatch : i64,
@@ -78,10 +81,10 @@ fn findfiles(kifupath : &str) -> Vec<String> {
     files
 }
 
-fn loadkifu(files : &[String]) -> Vec<(bitboard::BitBoard, i8, i8, i8, i8)> {
+fn loadkifu(files : &[String], d : &str) -> Vec<(bitboard::BitBoard, i8, i8, i8, i8)> {
     let mut boards : Vec<(bitboard::BitBoard, i8, i8, i8, i8)> = Vec::new();
     for fname in files.iter() {
-        let path = format!("kifu/{}", fname);
+        let path = format!("{d}/{}", fname);
         print!("{path}\r");
         let content = std::fs::read_to_string(&path).unwrap();
         let lines:Vec<&str> = content.split('\n').collect();
@@ -290,8 +293,13 @@ fn epochspeed(
 fn main() -> Result<(), tch::TchError> {
     let arg = Arg::parse();
 
-    let kifupath = "./kifu";
-    let mut boards = loadkifu(&findfiles(kifupath));
+    // let kifupath = "./kifu";
+    // let mut boards = loadkifu(&findfiles(kifupath));
+    let kifudir = arg.kifudir.unwrap_or(String::from("kifu"));
+    let mut boards = kifudir.split(",").flat_map(
+        |d| loadkifu(&findfiles(&format!("./{d}")), d)
+        ).collect();
+
     dedupboards(&mut boards);
     boards.shuffle(&mut rand::thread_rng());
     let testratio = arg.testratio as i64;
@@ -377,7 +385,7 @@ fn main() -> Result<(), tch::TchError> {
             for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
                 if i == iloss {continue;}
 
-                let mut dataset = Iter2::new(&inp, &tar, arg.minibatch);
+                let mut dataset = Iter2::new(inp, tar, arg.minibatch);
                 // let dataset = dataset.shuffle();
                 let dataset = dataset.shuffle().to_device(vs.device());
                 // let mut loss = tch::Tensor::new();
