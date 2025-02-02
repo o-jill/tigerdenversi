@@ -296,9 +296,9 @@ fn main() -> Result<(), tch::TchError> {
     // let kifupath = "./kifu";
     // let mut boards = loadkifu(&findfiles(kifupath));
     let kifudir = arg.kifudir.unwrap_or(String::from("kifu"));
-    let mut boards = kifudir.split(",").map(
+    let mut boards = kifudir.split(",").flat_map(
         |d| loadkifu(&findfiles(&format!("./{d}")), d)
-        ).flatten().collect();
+        ).collect();
 
     dedupboards(&mut boards);
     boards.shuffle(&mut rand::thread_rng());
