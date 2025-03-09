@@ -687,6 +687,15 @@ impl BitBoard {
         (self.black | self.white) == 0xffffffffffffffff
     }
 
+    pub fn flip_all(&self) -> BitBoard {
+        BitBoard {
+            black : self.white,
+            white: self.black,
+            pass : self.pass,
+            teban : -self.teban,
+        }
+    }
+
     pub fn rotate90(&self) -> BitBoard {
         let mut black = 0;
         let mut white = 0;
