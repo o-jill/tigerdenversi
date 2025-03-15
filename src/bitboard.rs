@@ -696,6 +696,58 @@ impl BitBoard {
         }
     }
 
+    pub fn flip_horz(&self) -> BitBoard {
+        let mut newblack = 0;
+        let mut newwhite = 0;
+        for i in 0..4 {
+            let mask = 0xff << (i * 8);
+            let b8 = self.black & mask;
+            let w8 = self.white & mask;
+            let shift = (8 - 1 - i * 2) * 8;
+            newblack |= b8 << shift;
+            newwhite |= w8 << shift;
+
+            let mask = 0xff00000000000000u64 >> (i * 8);
+            let b8 = self.black & mask;
+            let w8 = self.white & mask;
+            newblack |= b8 >> shift;
+            newwhite |= w8 >> shift;
+        }
+
+        BitBoard {
+            black : newblack,
+            white : newwhite,
+            teban : self.teban,
+            pass : self.pass,
+        }
+    }
+
+    pub fn flip_vert(&self) -> BitBoard {
+        let mut newblack = 0;
+        let mut newwhite = 0;
+        for i in 0..4 {
+            let mask = 0x0101010101010101 << i;
+            let b8 = self.black & mask;
+            let w8 = self.white & mask;
+            let shift = 8 - 1 - i * 2;
+            newblack |= b8 << shift;
+            newwhite |= w8 << shift;
+
+            let mask = 0x8080808080808080 >> i;
+            let b8 = self.black & mask;
+            let w8 = self.white & mask;
+            newblack |= b8 >> shift;
+            newwhite |= w8 >> shift;
+        }
+
+        BitBoard {
+            black : newblack,
+            white : newwhite,
+            teban : self.teban,
+            pass : self.pass,
+        }
+    }
+
     pub fn rotate90(&self) -> BitBoard {
         let mut black = 0;
         let mut white = 0;
@@ -5759,6 +5811,10 @@ fn testbitbrd() {
 
     let ban0 = BitBoard::from("7A/8/8/6a1/6a1/6a1/6a1/6a1 b").unwrap();
     ban0.put();
+    let hban = ban0.flip_horz();
+    assert_eq!(hban.to_str(), "A7/8/8/1a6/1a6/1a6/1a6/1a6 b");
+    let vban = ban0.flip_vert();
+    assert_eq!(vban.to_str(), "6a1/6a1/6a1/6a1/6a1/8/8/7A b");
     assert!(!ban0.checkreverse(7 - 1, 3 - 1));
     let ban = ban0.r#move(7, 3).unwrap();
     assert_eq!(ban.black.count_ones(), 2);
