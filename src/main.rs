@@ -98,19 +98,15 @@ fn loadkifu(files : &[String], d : &str) -> Vec<(bitboard::BitBoard, i8, i8, i8,
             let ban90 = ban.rotate90();
             let ban180 = ban.rotate180();
             let ban270 = ban180.rotate90();
-            let banfa = ban.flip_all();
-            let ban90fa = ban90.flip_all();
-            let ban180fa = ban180.flip_all();
-            let ban270fa = ban270.flip_all();
+            let banh = ban.flip_horz();
+            let banv = ban.flip_vert();
             let score = kifu.score.unwrap();
             boards.push((ban, t.teban, fsb, fsw, score));
             boards.push((ban90, t.teban, fsb, fsw, score));
             boards.push((ban180, t.teban, fsb, fsw, score));
             boards.push((ban270, t.teban, fsb, fsw, score));
-            boards.push((banfa, t.teban, fsw, fsb, -score));
-            boards.push((ban90fa, t.teban, fsw, fsb, -score));
-            boards.push((ban180fa, t.teban, fsw, fsb, -score));
-            boards.push((ban270fa, t.teban, fsw, fsb, -score));
+            boards.push((banh, t.teban, fsb, fsw, score));
+            boards.push((banv, t.teban, fsb, fsw, score));
         }
     }
     println!();
