@@ -240,7 +240,7 @@ impl Weight {
         let csv = line.split(",").collect::<Vec<_>>();
         let newtable : Vec<f32> = csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
         let nsz = newtable.len();
-        if WSZV7 != nsz {
+        if WSZV8 != nsz {
             return Err(String::from("size mismatch"));
         }
         self.weight.copy_from_slice(&newtable);
