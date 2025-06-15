@@ -228,19 +228,15 @@ impl Weight {
         Err(String::from("v2 format is not supported any more."))
     }
 
-    fn readv6(&mut self, line : &str) -> Result<(), String> {
-        let csv = line.split(',').collect::<Vec<_>>();
-        let newtable : Vec<f32> = csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
-        let nsz = newtable.len();
-        if WSZV6 != nsz {
-            return Err(format!("size mismatch v6 {WSZV6} != {nsz}"));
-        }
-        self.fromv6tov7(&newtable);
-        // println!("v6:{:?}", self.weight);
-        Ok(())
+    fn readv6(&mut self, _line : &str) -> Result<(), String> {
+        Err(String::from("v1 format is not supported any more."))
     }
 
-    fn readv7(&mut self, line : &str) -> Result<(), String> {
+    fn readv7(&mut self, _line : &str) -> Result<(), String> {
+        Err(String::from("v1 format is not supported any more."))
+    }
+
+    fn readv8(&mut self, line : &str) -> Result<(), String> {
         let csv = line.split(",").collect::<Vec<_>>();
         let newtable : Vec<f32> = csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
         let nsz = newtable.len();
@@ -248,7 +244,7 @@ impl Weight {
             return Err(String::from("size mismatch"));
         }
         self.weight.copy_from_slice(&newtable);
-        // println!("v7:{:?}", self.weight);
+        // println!("v8:{:?}", self.weight);
         Ok(())
     }
 
@@ -258,9 +254,9 @@ impl Weight {
         f.write_all(sv.join(",").as_bytes()).unwrap();
     }
 
-    pub fn writev7(&self, path : &str) {
+    pub fn writev8(&self, path : &str) {
         let mut f = fs::File::create(path).unwrap();
-        Weight::write(&mut f, &self.weight, &EvalFile::V7);
+        Weight::write(&mut f, &self.weight, &EvalFile::V8);
     }
 
     #[allow(dead_code)]
@@ -268,85 +264,6 @@ impl Weight {
         for (d, s) in self.weight.iter_mut().zip(src.weight.iter()) {
             *d = *s;
         }
-    }
-
-    /// copy v3 data into v4.
-    fn convert(&mut self, tbl : &[f32], nhid : usize) {
-        self.weight = [0.0 ; N_WEIGHT];
-        // ban
-        let n = nhid * bitboard::CELL_2D;
-        let we = &mut self.weight[0..n];
-        let tb = &tbl[0..n];
-        for (w, t) in we.iter_mut().zip(tb.iter()) {
-            *w = *t;
-        }
-
-        // teban
-        let idx3 = nhid * bitboard::CELL_2D;
-        let idx4 = N_HIDDEN * bitboard::CELL_2D;
-        let n = nhid;
-        let we = &mut self.weight[idx4..idx4 + n];
-        let tb = &tbl[idx3..idx3 + n];
-        for (w, t) in we.iter_mut().zip(tb.iter()) {
-            *w = *t;
-        }
-
-        // fixed stone
-        let idx3 = nhid * (bitboard::CELL_2D + 1);
-        let idx4 = N_HIDDEN * (bitboard::CELL_2D + 1);
-        let n = nhid;
-        let we = &mut self.weight[idx4..idx4 + n];
-        let tb = &tbl[idx3..idx3 + n];
-        for (w, t) in we.iter_mut().zip(tb.iter()) {
-            *w = *t;
-        }
-        let idx3 = nhid * (bitboard::CELL_2D + 1 + 1);
-        let idx4 = N_HIDDEN * (bitboard::CELL_2D + 1 + 1);
-        let n = nhid;
-        let we = &mut self.weight[idx4..idx4 + n];
-        let tb = &tbl[idx3..idx3 + n];
-        for (w, t) in we.iter_mut().zip(tb.iter()) {
-            *w = *t;
-        }
-
-        // dc
-        let idx3 = nhid * (bitboard::CELL_2D + 1 + 2);
-        let idx4 = N_HIDDEN * (bitboard::CELL_2D + 1 + 2);
-        let n = nhid;
-        let we = &mut self.weight[idx4..idx4 + n];
-        let tb = &tbl[idx3..idx3 + n];
-        for (w, t) in we.iter_mut().zip(tb.iter()) {
-            *w = *t;
-        }
-
-        // w2
-        let idx3 = nhid * (bitboard::CELL_2D + 1 + 2 + 1);
-        let idx4 = N_HIDDEN * (bitboard::CELL_2D + 1 + 2 + 1);
-        let n = nhid;
-        let we = &mut self.weight[idx4..idx4 + n];
-        let tb = &tbl[idx3..idx3 + n];
-        for (w, t) in we.iter_mut().zip(tb.iter()) {
-            *w = *t;
-        }
-
-        // dc2
-        let idx3 = nhid * (bitboard::CELL_2D + 1 + 2 + 1 + 1);
-        let idx4 = N_HIDDEN * (bitboard::CELL_2D + 1 + 2 + 1 + 1);
-        self.weight[idx4] =  tbl[idx3];
-        // println!("tbl:{tbl:?}");
-        // println!("we:{:?}", self.weight);
-    }
-
-    /// copy v6 data into v7.
-    fn fromv6tov7(&mut self, tbl : &[f32]) {
-        self.convert(tbl, 16);
-        let mut tmp = [0.0f32 ; N_WEIGHT];
-        tmp.copy_from_slice(&self.weight);
-        tmp[(N_INPUT + 1)* N_HIDDEN + (N_HIDDEN + 1) * N_HIDDEN2] = 1.0;
-        tmp[(N_INPUT + 1)* N_HIDDEN + N_HIDDEN * N_HIDDEN2]
-            = tmp[(N_INPUT + 1)* N_HIDDEN + N_HIDDEN];
-        tmp[(N_INPUT + 1)* N_HIDDEN + N_HIDDEN] = 0.0;
-        self.weight.copy_from_slice(&tmp);
     }
 
     #[allow(dead_code)]
