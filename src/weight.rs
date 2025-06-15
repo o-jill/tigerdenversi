@@ -78,6 +78,10 @@ impl EvalFile {
             _ => None
         }
     }
+
+    pub fn latest_header() -> String {
+        format!("# 64+1+2-{N_HIDDEN}-{N_HIDDEN2}-1")
+    }
 }
 
 #[repr(align(32))]
