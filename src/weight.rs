@@ -8,7 +8,7 @@ use std::{fs, io::{BufReader, BufRead}};
  * output: 1
  */
 pub const N_INPUT : usize = bitboard::CELL_2D + 1 + 2;
-pub const N_HIDDEN : usize = 32;
+pub const N_HIDDEN : usize = 128;
 pub const N_HIDDEN2 : usize = 16;
 const N_OUTPUT : usize = 1;
 const N_WEIGHT_TEBAN : usize =  bitboard::CELL_2D * N_HIDDEN;
@@ -31,7 +31,11 @@ const WSZV3 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * 4 + 4 + 1;
 const WSZV4 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * 8 + 8 + 1;
 const WSZV5 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * 16 + 16 + 1;
 const WSZV6 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * 32 + 32 + 1;
-const WSZV7 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * N_HIDDEN
+const WSZV7 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * 32
+        + (32 + 1) * 16 + 16 + 1;
+// ^^^^^ sigmoid
+// vvvvv relu
+const WSZV8 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * N_HIDDEN
         + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
 
 // v2
@@ -50,6 +54,7 @@ pub enum EvalFile{
     V5,
     V6,
     V7,
+    V8,
 }
 
 impl EvalFile {
@@ -63,6 +68,7 @@ impl EvalFile {
             EvalFile::V5 => {"# 64+1+2-16-1"},
             EvalFile::V6 => {"# 64+1+2-32-1"},
             EvalFile::V7 => {"# 64+1+2-32-16-1"},
+            EvalFile::V8 => {"# 64+1+2-128-16-1"},
         }
     }
 
@@ -75,6 +81,7 @@ impl EvalFile {
             "# 64+1+2-16-1" => Some(EvalFile::V5),
             "# 64+1+2-32-1" => Some(EvalFile::V6),
             "# 64+1+2-32-16-1" => Some(EvalFile::V7),
+            "# 64+1+2-128-16-1" => Some(EvalFile::V8),
             _ => None
         }
     }
@@ -190,6 +197,7 @@ impl Weight {
                         EvalFile::V5 => {return self.readv5(&l)},
                         EvalFile::V6 => {return self.readv6(&l)},
                         EvalFile::V7 => {return self.readv7(&l)},
+                        EvalFile::V8 => {return self.readv8(&l)},
                         _ => {}
                     }
                 },
