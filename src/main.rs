@@ -47,6 +47,9 @@ struct Arg {
     /// ratio of test data for calc loss
     #[arg(long, default_value_t = 5)]
     testratio : usize,
+    /// check if trained enough. [prefered: 0]
+    #[arg(long)]
+    autostop : Option<f64>,
 }
 
 fn net(vs : &nn::Path) -> impl Module {
@@ -344,14 +347,18 @@ fn main() -> Result<(), tch::TchError> {
         println!("{key}:{:?}", t.size());
     }
     let period = arg.anealing;
+    let autostop = arg.autostop;
     println!("epoch:{}", arg.epoch);
     println!("eta:{eta}");
     println!("cosine aneaing:{period}");
     println!("mini batch: {}", arg.minibatch);
     println!("weight decay:{}", arg.wdecay);
     println!("test ratio:{testratio}");
+    println!("auto stop:{autostop:?}");
     let start = std::time::Instant::now();
     if period > 1 {
+        let mut sum_loss_prev = 99999999.9;
+        let mut sum_loss = 0.0;
         for ep in 0..arg.epoch {
             let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
             optm.set_lr(
@@ -383,6 +390,20 @@ fn main() -> Result<(), tch::TchError> {
             let elapsed = start.elapsed();
             print!("{}", &epochspeed(ep, arg.epoch, testloss, elapsed));
             std::io::stdout().flush().unwrap();
+            if let Some(threshold) = autostop {
+                sum_loss += testloss;
+                if (ep + 1) % (testratio as i32 * period) as usize == 0 {
+                    println!("\nsum_loss{}:{sum_loss}", ep + 1);
+
+                    if  sum_loss_prev - sum_loss > threshold {
+                        sum_loss_prev = sum_loss;
+                        sum_loss = 0.0;
+                    } else {
+                        println!("done as a result of learning enough.");
+                        break;
+                    }
+                }
+            }
         }
     } else {
         for ep in 0..arg.epoch {
