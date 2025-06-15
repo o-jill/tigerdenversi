@@ -12,7 +12,7 @@ mod weight;
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
 const HIDDENSIZE : i64 = weight::N_HIDDEN as i64;
 const HIDDENSIZE2 : i64 = weight::N_HIDDEN2 as i64;
-const MIN_COSANEAL : f64 = 1e-3;
+const MIN_COSANEAL : f64 = 1e-4;
 
 #[derive(Debug, Parser)]
 #[command(version, author, about)]
