@@ -53,17 +53,35 @@ struct Arg {
 }
 
 fn net(vs : &nn::Path) -> impl Module {
-    nn::seq()
-        .add(
-            nn::linear(vs / "layer1",
-            INPUTSIZE, HIDDENSIZE, Default::default()))
-            // INPUTSIZE, HIDDENSIZE, LinearConfig{ws_init:tch::nn::Init::set(self, tensor)}))
-        .add_fn(|xs| xs.sigmoid())
-        .add(
-            nn::linear(vs / "layer2",
-             HIDDENSIZE, HIDDENSIZE2, Default::default()))
-        .add_fn(|xs| xs.sigmoid())
-        .add(nn::linear(vs / "layer3", HIDDENSIZE2, 1, Default::default()))
+    let relu = true;
+    // let relu = false;  // sigmoid
+    if relu {
+        println!("activation function: RELU");
+        nn::seq()
+            .add(
+                nn::linear(vs / "layer1",
+                INPUTSIZE, HIDDENSIZE, Default::default()))
+                // INPUTSIZE, HIDDENSIZE, LinearConfig{ws_init:tch::nn::Init::set(self, tensor)}))
+            .add_fn(|xs| xs.relu())
+            .add(
+                nn::linear(vs / "layer2",
+                 HIDDENSIZE, HIDDENSIZE2, Default::default()))
+            .add_fn(|xs| xs.relu())
+            .add(nn::linear(vs / "layer3", HIDDENSIZE2, 1, Default::default()))
+    } else {
+        println!("activation function: Sigmoid");
+        nn::seq()
+            .add(
+                nn::linear(vs / "layer1",
+                INPUTSIZE, HIDDENSIZE, Default::default()))
+                // INPUTSIZE, HIDDENSIZE, LinearConfig{ws_init:tch::nn::Init::set(self, tensor)}))
+            .add_fn(|xs| xs.sigmoid())
+            .add(
+                nn::linear(vs / "layer2",
+                 HIDDENSIZE, HIDDENSIZE2, Default::default()))
+            .add_fn(|xs| xs.sigmoid())
+            .add(nn::linear(vs / "layer3", HIDDENSIZE2, 1, Default::default()))
+    }
 }
 
 // list up kifu
