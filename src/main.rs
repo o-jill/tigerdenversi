@@ -49,6 +49,7 @@ struct Arg {
     testratio : usize,
     /// check if trained enough. [prefered: 0]
     #[arg(long)]
+    #[structopt(allow_hyphen_values = true)]
     autostop : Option<f64>,
 }
 
