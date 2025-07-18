@@ -122,6 +122,12 @@ fn loadkifu(files : &[String], d : &str) -> Vec<(bitboard::BitBoard, i8, i8, i8,
             let ban270 = ban180.rotate90();
             let banh = ban.flip_horz();
             let banv = ban.flip_vert();
+            let banfa = ban.flip_all();
+            let ban90fa = ban90.flip_all();
+            let ban180fa = ban180.flip_all();
+            let ban270fa = ban270.flip_all();
+            let banhfa = banh.flip_all();
+            let banvfa = banv.flip_all();
             let score = kifu.score.unwrap();
             boards.push((ban, t.teban, fsb, fsw, score));
             boards.push((ban90, t.teban, fsb, fsw, score));
@@ -129,6 +135,13 @@ fn loadkifu(files : &[String], d : &str) -> Vec<(bitboard::BitBoard, i8, i8, i8,
             boards.push((ban270, t.teban, fsb, fsw, score));
             boards.push((banh, t.teban, fsb, fsw, score));
             boards.push((banv, t.teban, fsb, fsw, score));
+            /* flip color */
+            boards.push((banfa, -t.teban, fsw, fsb, -score));
+            boards.push((ban90fa, -t.teban, fsw, fsb, -score));
+            boards.push((ban180fa, -t.teban, fsw, fsb, -score));
+            boards.push((ban270fa, -t.teban, fsw, fsb, -score));
+            boards.push((banhfa, -t.teban, fsw, fsb, -score));
+            boards.push((banvfa, -t.teban, fsw, fsb, -score));
         }
     }
     println!();
