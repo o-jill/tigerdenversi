@@ -85,7 +85,7 @@ impl BitBoard {
                     y += 1;
                 },
                 _ => {
-                    return Err(format!("unknown letter rfen [{}]", ch));
+                    return Err(format!("unknown letter rfen [{ch}]"));
                 }
             }
         }
@@ -221,12 +221,12 @@ impl BitBoard {
                         "__"
                     };
             }
-            println!("{}|", line);
+            println!("{line}|");
         }
         println!("{}", 
             match self.teban {
-                SENTE => { format!("{}'s turn.", STONE_SENTE)},
-                GOTE => { format!("{}'s turn.", STONE_GOTE)},
+                SENTE => { format!("{STONE_SENTE}'s turn.")},
+                GOTE => { format!("{STONE_GOTE}'s turn.")},
                 _ => {"finished.".to_string()}
             }
         )
@@ -305,7 +305,7 @@ impl BitBoard {
      */
     fn reverse(&mut self, x : usize, y : usize) {
         if x > 7 || y > 7 {
-            panic!("{},{} is out of range.", x, y);
+            panic!("{x},{y} is out of range.");
         }
 
         let color = self.teban;
@@ -905,16 +905,16 @@ impl BitBoard {
 
                 if (bit & black) != 0 {
                     if (fcellsb & wbit) != wbit {
-                        // println!("fcellsb : {:b}", fcellsb);
+                        // println!("fcellsb : {fcellsb:b}");
                         break;
                     }
 
                     fcellsb |= bit;
                     cnt += 1;
-                    // println!("fcellsb : {:b}, {}", fcellsb, cnt);
+                    // println!("fcellsb : {fcellsb:b}, {cnt}");
                 } else if (bit & white) != 0 {
                     if (fcellsw & wbit) != wbit {
-                        // println!("fcellsw : {:b}", fcellsw);
+                        // println!("fcellsw : {fcellsw:b}");
                         break;
                     }
 
@@ -950,7 +950,7 @@ impl BitBoard {
                     cnt += 1;
                     // println!("xy: {:x}, {:x}", x, _y);
                     // println!("bit:{:x}, wbit:{:x}", bit, wbit);
-                    // println!("fcellsw : {:b}, {}", fcellsw, cnt);
+                    // println!("fcellsw : {fcellsw:b}, {cnt}");
                 } else {
                     break;
                 }
@@ -1116,7 +1116,7 @@ impl BitBoard {
 
                     fcellsw |= bit;
                     cnt += 1;
-                    // println!("fcellsw : {:08x}, {}", fcellsw, cnt);
+                    // println!("fcellsw : {fcellsw:08x}, {cnt}");
                 } else {
                     break;
                 }
@@ -1160,15 +1160,15 @@ impl BitBoard {
         }
         //
         // xは@と同じ色の確定石
-        // println!("fc:{:?}, {:?}", fcells, count);
-        // println!("fc:{:?}", count);
+        // println!("fc:{fcells:?}, {count:?}");
+        // println!("fc:{count:?}");
         // for i in 0..8 {
         //     for j in 0..8 {
         //         print!("{},", fcells[i * 8 + j]);
         //     }
         //     println!("");
         // }
-        // println!("fc:{:b}, {:b}", fcellsb, fcellsw);
+        // println!("fc:{fcellsb:b}, {fcellsw:b}");
         (fcellsb.count_ones() as i8, fcellsw.count_ones() as i8)
     }
 }
@@ -1203,7 +1203,7 @@ pub fn count_emptycells(rfen : &str) -> Result<i8, String> {
                 return Ok(count);
             },
             _ => {
-                return Err(format!("unknown letter rfen [{}]", ch));
+                return Err(format!("unknown letter rfen [{ch}]"));
             }
         }
     }

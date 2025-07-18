@@ -106,7 +106,7 @@ fn findfiles(kifupath : &str) -> Vec<String> {
 fn loadkifu(files : &[String], d : &str) -> Vec<(bitboard::BitBoard, i8, i8, i8, i8)> {
     let mut boards : Vec<(bitboard::BitBoard, i8, i8, i8, i8)> = Vec::new();
     for fname in files.iter() {
-        let path = format!("{d}/{}", fname);
+        let path = format!("{d}/{fname}");
         print!("{path}\r");
         let content = std::fs::read_to_string(&path).unwrap();
         let lines:Vec<&str> = content.split('\n').collect();
@@ -191,7 +191,7 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
         return Err(format!("{fname} was not found..."));
     }
     if fname.ends_with(".safetensors") {
-        println!("load weight: {}", fname);
+        println!("load weight: {fname}");
         if let Err(e) = vs.load(fname) {
             return Err(e.to_string());
         }
