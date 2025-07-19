@@ -1,3 +1,6 @@
+
+use super::*;
+
 pub const SENTE : i8 = 1;
 pub const BLANK : i8 = 0;
 pub const GOTE : i8 = -1;
@@ -264,6 +267,20 @@ impl BitBoard {
     #[allow(dead_code)]
     pub fn nblank(&self) -> u32 {
         (self.black | self.white).count_zeros()
+    }
+
+    pub fn stones(&self) -> u32 {
+        (self.black | self.white).count_ones()
+    }
+
+    pub fn progress(&self) -> usize {
+        let cnt = self.stones() as usize;
+        ((cnt - 4) * weight::N_PROGRESS_DIV) / 60
+    }
+
+    pub fn is_progress(&self, prgs : usize) -> bool {
+        let cnt = self.stones() as usize;
+        ((cnt - 4) * weight::N_PROGRESS_DIV) / 60 == prgs
     }
 
     fn index(x: usize, y: usize) -> usize {
