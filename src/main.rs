@@ -288,8 +288,10 @@ fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress : usi
         outp[offset_out..offset_out + bitboard::CELL_2D].copy_from_slice(
             &tmp[offset..offset + bitboard::CELL_2D]);
         outp[weight::N_WEIGHT_TEBAN + i] = tmp[bitboard::CELL_2D + offset];
-        outp[weight::N_WEIGHT_FIXST_B + i] = tmp[bitboard::CELL_2D + 1 + offset];
-        outp[weight::N_WEIGHT_FIXST_W + i] = tmp[bitboard::CELL_2D + 2 + offset];
+        outp[weight::N_WEIGHT_FIXST_B + i] =
+            tmp[bitboard::CELL_2D + 1 + offset];
+        outp[weight::N_WEIGHT_FIXST_W + i] =
+            tmp[bitboard::CELL_2D + 2 + offset];
     }
     let keys = [
         "layer1.bias", "layer2.weight", "layer2.bias", "layer3.weight"
