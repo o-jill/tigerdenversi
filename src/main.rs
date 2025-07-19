@@ -285,8 +285,8 @@ fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress : usi
     for i in 0..HIDDENSIZE as usize {
         let offset_out = i * bitboard::CELL_2D;
         let offset = i * INPUTSIZE as usize;
-        outp[offset_out..(offset_out + bitboard::CELL_2D as usize)].copy_from_slice(
-            &tmp[offset..(offset + bitboard::CELL_2D)]);
+        outp[offset_out..offset_out + bitboard::CELL_2D].copy_from_slice(
+            &tmp[offset..offset + bitboard::CELL_2D]);
         outp[weight::N_WEIGHT_TEBAN + i] = tmp[bitboard::CELL_2D + offset];
         outp[weight::N_WEIGHT_FIXST_B + i] = tmp[bitboard::CELL_2D + 1 + offset];
         outp[weight::N_WEIGHT_FIXST_W + i] = tmp[bitboard::CELL_2D + 2 + offset];
@@ -311,9 +311,6 @@ fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress : usi
 
     println!("save to weight [{progress}]");
     weights_dst.copy_from_slice(&outp, progress);
-
-    // let mut f = std::fs::File::create("weights.txt").unwrap();
-    // f.write_all(params.as_bytes()).unwrap();
 }
 
 fn writeweights(weights : &weight::Weight) {
