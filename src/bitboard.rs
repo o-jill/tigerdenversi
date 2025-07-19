@@ -279,8 +279,7 @@ impl BitBoard {
     }
 
     pub fn is_progress(&self, prgs : usize) -> bool {
-        let cnt = self.stones() as usize;
-        ((cnt - 4) * weight::N_PROGRESS_DIV) / 60 == prgs
+        self.progress() == prgs
     }
 
     fn index(x: usize, y: usize) -> usize {
