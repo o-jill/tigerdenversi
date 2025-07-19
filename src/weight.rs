@@ -130,7 +130,7 @@ impl Weight {
 
     /// copy weights from array
     pub fn copy_from_slice(&mut self, array : &[f32], progress : usize) {
-        let offset = progress * N_PROGRESS_DIV;
+        let offset = progress * N_WEIGHT_PAD;
         self.weight[offset..offset + N_WEIGHT].copy_from_slice(array);
     }
 
