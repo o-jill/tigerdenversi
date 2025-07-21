@@ -51,6 +51,32 @@ struct Arg {
     #[arg(long)]
     #[structopt(allow_hyphen_values = true)]
     autostop : Option<f64>,
+    /// parts to train. ex. 1,,0 means ending part.
+    #[arg(long)]
+    part : Option<String>,
+}
+
+/// csv text to get an array if each part will be trained or not.
+/// "", "0", "false", "no", "none", "off" and "zero" disables training.
+///
+/// ex. "" becomes [true, true, true]
+/// ex. "1,,0" becomes [true, false, false]
+/// ex. "-1,false,zero" becomes [true, false, false]
+fn partlist(txt : &Option<String>) -> [bool ; weight::N_PROGRESS_DIV] {
+    let mut ret = [true ; weight::N_PROGRESS_DIV];
+    if txt.is_none() {
+        return ret;
+    }
+
+    let txt = txt.as_ref().unwrap();
+    let disable = ["", "0", "false", "no", "none", "off", "zero"];
+    let txt_lo = txt.to_lowercase();
+    for (i, elem) in txt_lo.split(',').enumerate() {
+        if i >= weight::N_PROGRESS_DIV {break;}
+
+        ret[i] = disable.iter().find(|&&txt| txt == elem).is_none();
+    }
+    ret
 }
 
 fn net(vs : &nn::Path) -> impl Module {
@@ -103,7 +129,7 @@ fn findfiles(kifupath : &str) -> Vec<String> {
     files
 }
 
-fn loadkifu(files : &[String], d : &str) -> Vec<(bitboard::BitBoard, i8, i8, i8, i8)> {
+fn loadkifu(files : &[String], d : &str, progress : usize) -> Vec<(bitboard::BitBoard, i8, i8, i8, i8)> {
     let mut boards : Vec<(bitboard::BitBoard, i8, i8, i8, i8)> = Vec::new();
     for fname in files.iter() {
         let path = format!("{d}/{fname}");
@@ -114,6 +140,7 @@ fn loadkifu(files : &[String], d : &str) -> Vec<(bitboard::BitBoard, i8, i8, i8,
         for t in kifu.list.iter() {
             let ban = bitboard::BitBoard::from(&t.rfen).unwrap();
             if ban.is_full() {continue;}
+            if !ban.is_progress(progress) {continue;}
 
             let (fsb, fsw) = ban.fixedstones();
 
@@ -185,33 +212,18 @@ fn loadtensor(vs : &mut VarStore, key : &str, src : &Tensor) {
 // load from `fname` into `vs`.
 //
 // .safetensor and ruversi weight format are available.
-fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
-    let path = std::path::Path::new(fname);
-    if !path.exists() {
-        return Err(format!("{fname} was not found..."));
-    }
-    if fname.ends_with(".safetensors") {
-        println!("load weight: {fname}");
-        if let Err(e) = vs.load(fname) {
-            return Err(e.to_string());
-        }
-
-        return Ok(());
-    }
-
-    let mut txtweight = weight::Weight::new();
-    txtweight.read(fname)?;
-
+fn load(vs : &mut VarStore, weights_org : &weight::Weight, progress : usize)
+        -> Result<(), String> {
     const INPSIZE : usize = bitboard::CELL_2D + 1 + 2;
     const HIDSIZE : usize =  HIDDENSIZE as usize;
-    let wban = txtweight.wban();
-    let wtbn = txtweight.wteban();
-    let wfs = txtweight.wfixedstones();
-    let wdc = txtweight.wibias();
-    let whdn = txtweight.wlayer1();
-    let wdc2 = txtweight.wl1bias();
-    let whdn2 = txtweight.wlayer2();
-    let wdc3 = txtweight.wl2bias();
+    let wban = weights_org.wban(progress);
+    let wtbn = weights_org.wteban(progress);
+    let wfs = weights_org.wfixedstones(progress);
+    let wdc = weights_org.wibias(progress);
+    let whdn = weights_org.wlayer1(progress);
+    let wdc2 = weights_org.wl1bias(progress);
+    let whdn2 = weights_org.wlayer2(progress);
+    let wdc3 = weights_org.wl2bias(progress);
 
     // layer1.weight
     let mut weights = [0.0f32 ; INPSIZE * HIDSIZE];
@@ -257,56 +269,57 @@ fn load(fname : &str, vs : &mut VarStore) -> Result<(), String> {
     Ok(())
 }
 
-fn storeweights(vs : VarStore) {
-    println!("save to weight.safetensors");
-    vs.save("weight.safetensors").unwrap();
+fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress : usize) {
+    println!("save to weights[{progress}]");
 
     // VarStore to weights
     let weights = vs.variables();
-    let mut outp = [0.0f32 ; (INPUTSIZE * HIDDENSIZE) as usize];
+    let mut outp = [0.0f32 ; weight::N_WEIGHT];
+    let mut tmp = [0.0f32 ; (INPUTSIZE * HIDDENSIZE) as usize];
     // let mut params = weight::EvalFile::V8.to_str().to_string() + "\n";
-    let mut params = weight::EvalFile::latest_header() + "\n";
-    let mut paramste = String::new();
-    let mut paramsfb = String::new();
-    let mut paramsfw = String::new();
 
     let l1w = weights.get("layer1.weight").unwrap();
     println!("layer1.weight:{:?}", l1w.size());
     let numel = l1w.numel();
-    l1w.copy_data(outp.as_mut_slice(), numel);
-    for i in 0..HIDDENSIZE {
-        let offset = (i * INPUTSIZE) as usize;
-        params += &outp[offset..(offset + bitboard::CELL_2D)].iter()
-            .map(|a| format!("{a},")).collect::<Vec<String>>().join("");
-        paramste += &format!("{},", outp[bitboard::CELL_2D + offset]);
-        paramsfb += &format!("{},", outp[bitboard::CELL_2D + 1 + offset]);
-        paramsfw += &format!("{},", outp[bitboard::CELL_2D + 2 + offset]);
+    l1w.copy_data(tmp.as_mut_slice(), numel);
+    for i in 0..HIDDENSIZE as usize {
+        let offset_out = i * bitboard::CELL_2D;
+        let offset = i * INPUTSIZE as usize;
+        outp[offset_out..offset_out + bitboard::CELL_2D].copy_from_slice(
+            &tmp[offset..offset + bitboard::CELL_2D]);
+        outp[weight::N_WEIGHT_TEBAN + i] = tmp[bitboard::CELL_2D + offset];
+        outp[weight::N_WEIGHT_FIXST_B + i] =
+            tmp[bitboard::CELL_2D + 1 + offset];
+        outp[weight::N_WEIGHT_FIXST_W + i] =
+            tmp[bitboard::CELL_2D + 2 + offset];
     }
-    params += &paramste;
-    params += &paramsfb;
-    params += &paramsfw;
-    // let keys = ["layer1.weight", "layer1.bias", "layer2.weight", "layer2.bias"];
     let keys = [
         "layer1.bias", "layer2.weight", "layer2.bias", "layer3.weight"
     ];
+    let mut offset = weight::N_WEIGHT_INPUTBIAS;
     for key in keys {
         let l1w = weights.get(key).unwrap();
         println!("{key}:{:?}", l1w.size());
         let numel = l1w.numel();
-        l1w.copy_data(outp.as_mut_slice(), numel);
-        params += &outp[0..numel].iter()
-            .map(|a| format!("{a}")).collect::<Vec<String>>().join(",");
-        params += ",";
+        l1w.copy_data(tmp.as_mut_slice(), numel);
+        outp[offset..offset + numel].copy_from_slice(&tmp[0..numel]);
+        offset += numel;
     }
-    let l1w = weights.get("layer3.bias").unwrap();
-    println!("layer3.bias:{:?}", l1w.size());
-    let numel = l1w.numel();
-    l1w.copy_data(outp.as_mut_slice(), numel);
-    params += &outp[0..numel].iter()
-        .map(|a| format!("{a}")).collect::<Vec<String>>().join(",");
-    println!("save to weight.txt");
-    let mut f = std::fs::File::create("weights.txt").unwrap();
-    f.write_all(params.as_bytes()).unwrap();
+    let l3b = weights.get("layer3.bias").unwrap();
+    println!("layer3.bias:{:?}", l3b.size());
+    let numel = l3b.numel();
+    l1w.copy_data(tmp.as_mut_slice(), numel);
+    *outp.last_mut().unwrap() = tmp[0];
+
+    println!("save to weight [{progress}]");
+    weights_dst.copy_from_slice(&outp, progress);
+}
+
+fn writeweights(weights : &weight::Weight) {
+    println!("save to weights.txt");
+    if let Err(err) = weights.writev9("weights.txt") {
+        panic!("{err}");
+    }
 }
 
 fn epochspeed(
@@ -337,141 +350,162 @@ fn main() -> Result<(), tch::TchError> {
     // let kifupath = "./kifu";
     // let mut boards = loadkifu(&findfiles(kifupath));
     let kifudir = arg.kifudir.unwrap_or(String::from("kifu"));
-    let mut boards = kifudir.split(",").flat_map(
-        |d| loadkifu(&findfiles(&format!("./{d}")), d)
-        ).collect();
-
-    dedupboards(&mut boards);
-    boards.shuffle(&mut rand::thread_rng());
-    let testratio = arg.testratio as i64;
-
-    let input = tch::Tensor::from_slice(
-        &extractboards(&boards)).view((boards.len() as i64, INPUTSIZE));
-    println!("input : {} {:?}", input.dim(), input.size());
-
-    let target = tch::Tensor::from_slice(
-        &extractscore(&boards)).view((boards.len() as i64, 1));
-    println!("target: {} {:?}", target.dim(), target.size());
-
-    let inputs = input.chunk(testratio, 0);
-    let targets = target.chunk(testratio, 0);
-
     let devtype = arg.device.unwrap_or("cpu".to_string());
-    let device = if devtype == "mps" && tch::utils::has_mps() {
-        Device::Mps      //  9h9m46s/100ep
-        // 2m36s/100ep/18907b
-    } else if devtype == "cuda" && tch::utils::has_cuda() {
-        Device::Cuda(0)
-    } else {
-        Device::Cpu      // 13m0s/100ep/1516288b
-        // 13s/100ep/18907b
-    };
-    let mut vs = VarStore::new(device);
-    let nnet = net(&vs.root());
+
+    let mut weights = weight::Weight::default();
     if let Some(awei) = arg.weight {
         println!("load weight from {}", &awei);
-        if let Err(e) = load(
-            &awei, &mut vs) {panic!("{e}")}
+        if let Err(err) = weights.read(&awei) {
+            panic!("{err}");
+        }
     }
-    let eta = arg.eta;
-    let mut optm = nn::AdamW::default().build(&vs, eta)?;
-    optm.set_weight_decay(arg.wdecay);
-    for (key, t) in vs.variables().iter_mut() {
-        println!("{key}:{:?}", t.size());
-    }
-    let period = arg.anealing;
-    let autostop = arg.autostop;
-    println!("epoch:{}", arg.epoch);
-    println!("eta:{eta}");
-    println!("cosine aneaing:{period}");
-    println!("mini batch: {}", arg.minibatch);
-    println!("weight decay:{}", arg.wdecay);
-    println!("test ratio:{testratio}");
-    println!("auto stop:{autostop:?}");
-    let start = std::time::Instant::now();
-    if period > 1 {
-        let mut sum_loss_prev = 99999999.9;
-        let mut sum_loss = 0.0;
-        for ep in 0..arg.epoch {
-            let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
-            optm.set_lr(
-                eta * MIN_COSANEAL +
-                    eta * 0.5 * (1.0 - MIN_COSANEAL)
-                        * (1.0 + (std::f64::consts::PI * (ep as i32 % period) as f64 / (period - 1) as f64).cos())
-            );
-            for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
-                if i == iloss {continue;}
 
-                let mut dataset = Iter2::new(inp, tar, arg.minibatch);
-                // let dataset = dataset.shuffle();
-                let dataset = dataset.shuffle().to_device(vs.device());
-                for (xs, ys) in dataset {
-                    // println!("xs: {} {:?} ys: {} {:?}",
-                    //          xs.dim(), xs.size(), ys.dim(), ys.size());
-                    let loss =
-                        nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
-                    optm.backward_step(&loss);
+    let trainingpart = partlist(&arg.part);
+
+    for (prgs, en) in trainingpart.iter().enumerate() {
+        if !*en {
+            println!("progress[{prgs}] skipped.");
+            continue;
+        }
+
+        let mut boards = kifudir.split(",").flat_map(
+            |d| loadkifu(&findfiles(&format!("./{d}")), d, prgs)
+            ).collect();
+
+        dedupboards(&mut boards);
+        boards.shuffle(&mut rand::thread_rng());
+        let testratio = arg.testratio as i64;
+
+        let input = tch::Tensor::from_slice(
+            &extractboards(&boards)).view((boards.len() as i64, INPUTSIZE));
+        println!("input : {} {:?}", input.dim(), input.size());
+
+        let target = tch::Tensor::from_slice(
+            &extractscore(&boards)).view((boards.len() as i64, 1));
+        println!("target: {} {:?}", target.dim(), target.size());
+
+        let inputs = input.chunk(testratio, 0);
+        let targets = target.chunk(testratio, 0);
+
+        let device = if devtype == "mps" && tch::utils::has_mps() {
+            Device::Mps      //  9h9m46s/100ep
+            // 2m36s/100ep/18907b
+        } else if devtype == "cuda" && tch::utils::has_cuda() {
+            Device::Cuda(0)
+        } else {
+            Device::Cpu      // 13m0s/100ep/1516288b
+            // 13s/100ep/18907b
+        };
+        let mut vs = VarStore::new(device);
+        let nnet = net(&vs.root());
+
+        if let Err(err) = load(&mut vs, &weights, prgs) {
+            panic!("{err}");
+        }
+
+        let eta = arg.eta;
+        let mut optm = nn::AdamW::default().build(&vs, eta)?;
+        optm.set_weight_decay(arg.wdecay);
+        for (key, t) in vs.variables().iter_mut() {
+            println!("{key}:{:?}", t.size());
+        }
+        let period = arg.anealing;
+        let autostop = arg.autostop;
+        println!("epoch:{}", arg.epoch);
+        println!("eta:{eta}");
+        println!("cosine aneaing:{period}");
+        println!("mini batch: {}", arg.minibatch);
+        println!("weight decay:{}", arg.wdecay);
+        println!("test ratio:{testratio}");
+        println!("auto stop:{autostop:?}");
+        println!("training part: {trainingpart:?}");
+        let start = std::time::Instant::now();
+        if period > 1 {
+            let mut sum_loss_prev = 99999999.9;
+            let mut sum_loss = 0.0;
+            for ep in 0..arg.epoch {
+                let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
+                optm.set_lr(
+                    eta * MIN_COSANEAL +
+                        eta * 0.5 * (1.0 - MIN_COSANEAL)
+                            * (1.0 + (std::f64::consts::PI * (ep as i32 % period) as f64 / (period - 1) as f64).cos())
+                );
+                for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
+                    if i == iloss {continue;}
+
+                    let mut dataset = Iter2::new(inp, tar, arg.minibatch);
+                    // let dataset = dataset.shuffle();
+                    let dataset = dataset.shuffle().to_device(vs.device());
+                    for (xs, ys) in dataset {
+                        // println!("xs: {} {:?} ys: {} {:?}",
+                        //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                        let loss =
+                            nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                        optm.backward_step(&loss);
+                    }
+                }
+                let testloss = if testratio == 0 {
+                        0f64
+                    } else {
+                        let loss = nnet.forward(&inputs[iloss])
+                                .mse_loss(&targets[iloss], tch::Reduction::Mean);
+                        loss.double_value(&[])
+                    };
+                let elapsed = start.elapsed();
+                print!("{}", &epochspeed(ep, arg.epoch, testloss, elapsed));
+                std::io::stdout().flush().unwrap();
+                if let Some(threshold) = autostop {
+                    sum_loss += testloss;
+                    if (ep + 1) % (testratio as i32 * period) as usize == 0 {
+                        println!("\nsum_loss{}:{sum_loss}", ep + 1);
+
+                        if  sum_loss_prev - sum_loss > threshold {
+                            sum_loss_prev = sum_loss;
+                            sum_loss = 0.0;
+                        } else {
+                            println!("done as a result of learning enough.");
+                            break;
+                        }
+                    }
                 }
             }
-            let testloss = if testratio == 0 {
+        } else {
+            for ep in 0..arg.epoch {
+                let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
+                for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
+                    if i == iloss {continue;}
+
+                    let mut dataset = Iter2::new(inp, tar, arg.minibatch);
+                    // let dataset = dataset.shuffle();
+                    let dataset = dataset.shuffle().to_device(vs.device());
+                    // let mut loss = tch::Tensor::new();
+                    for (xs, ys) in dataset {
+                        // println!("xs: {} {:?} ys: {} {:?}",
+                        //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                        let loss =
+                            nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                        optm.backward_step(&loss);
+                    }
+                }
+                let testloss = if testratio == 0 {
                     0f64
                 } else {
                     let loss = nnet.forward(&inputs[iloss])
                             .mse_loss(&targets[iloss], tch::Reduction::Mean);
                     loss.double_value(&[])
                 };
-            let elapsed = start.elapsed();
-            print!("{}", &epochspeed(ep, arg.epoch, testloss, elapsed));
-            std::io::stdout().flush().unwrap();
-            if let Some(threshold) = autostop {
-                sum_loss += testloss;
-                if (ep + 1) % (testratio as i32 * period) as usize == 0 {
-                    println!("\nsum_loss{}:{sum_loss}", ep + 1);
-
-                    if  sum_loss_prev - sum_loss > threshold {
-                        sum_loss_prev = sum_loss;
-                        sum_loss = 0.0;
-                    } else {
-                        println!("done as a result of learning enough.");
-                        break;
-                    }
-                }
+                let elapsed = start.elapsed();
+                print!("{}", &epochspeed(ep, arg.epoch, testloss, elapsed));
+                std::io::stdout().flush().unwrap();
             }
         }
-    } else {
-        for ep in 0..arg.epoch {
-            let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
-            for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
-                if i == iloss {continue;}
+        println!();
 
-                let mut dataset = Iter2::new(inp, tar, arg.minibatch);
-                // let dataset = dataset.shuffle();
-                let dataset = dataset.shuffle().to_device(vs.device());
-                // let mut loss = tch::Tensor::new();
-                for (xs, ys) in dataset {
-                    // println!("xs: {} {:?} ys: {} {:?}",
-                    //          xs.dim(), xs.size(), ys.dim(), ys.size());
-                    let loss =
-                        nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
-                    optm.backward_step(&loss);
-                }
-            }
-            let testloss = if testratio == 0 {
-                0f64
-            } else {
-                let loss = nnet.forward(&inputs[iloss])
-                        .mse_loss(&targets[iloss], tch::Reduction::Mean);
-                loss.double_value(&[])
-            };
-            let elapsed = start.elapsed();
-            print!("{}", &epochspeed(ep, arg.epoch, testloss, elapsed));
-            std::io::stdout().flush().unwrap();
-        }
+        // VarStore to weights
+        storeweights(&mut weights, vs, prgs);
     }
-    println!();
 
-    // VarStore to weights
-    storeweights(vs);
+    writeweights(&weights);
 
     Ok(())
 }
