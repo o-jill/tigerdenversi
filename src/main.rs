@@ -288,7 +288,7 @@ fn main() -> Result<(), tch::TchError> {
     let kifudir = arg.kifudir.unwrap_or("kifu".to_string()).clone();
     let devtype = arg.device.unwrap_or("cpu".to_string());
     let devtype = devtype.clone();
-    let mut weights = weight::Weight::box_new();
+    let mut weights = weight::Weight::new();
     if let Some(awei) = arg.weight {
         println!("load weight from {}", &awei);
         if let Err(err) = weights.read(&awei) {
