@@ -1,5 +1,4 @@
 use std::io::Write;
-
 use clap::Parser;
 use rand::seq::SliceRandom;
 use tch::nn::{self, Module, OptimizerConfig, VarStore};
@@ -8,76 +7,12 @@ use tch::{Device, data::Iter2, Tensor};
 mod kifu;
 mod bitboard;
 mod weight;
+mod argument;
 
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
 const HIDDENSIZE : i64 = weight::N_HIDDEN as i64;
 const HIDDENSIZE2 : i64 = weight::N_HIDDEN2 as i64;
 const MIN_COSANEAL : f64 = 1e-4;
-
-#[derive(Debug, Parser)]
-#[command(version, author, about)]
-struct Arg {
-    /// path for weight.safetensor to use
-    #[arg(short, long)]
-    weight : Option<String>,
-    /// initial learning rate
-    #[arg(short, long, default_value_t = 0.01)]
-    eta : f64,
-    /// # of epochs
-    #[arg(long, default_value_t = 100)]
-    epoch : usize,
-    /// kifu directory
-    #[arg(long)]
-    kifudir : Option<String>,
-    /// mini batch size
-    #[arg(long, default_value_t = 16)]
-    minibatch : i64,
-    /// storing weight after some iterations as weight.EPOCH.txt.
-    #[arg(short, long)]
-    progress : Option<String>,
-    /// cosine anealing period.
-    #[arg(short, long, default_value_t = 0)]
-    anealing : i32,
-    /// device to process. cuda, mps or cpu. default:cpu.
-    #[arg(long)]
-    device : Option<String>,
-    /// weight decay
-    #[arg(long, default_value_t = 0.0002)]
-    wdecay : f64,
-    /// ratio of test data for calc loss
-    #[arg(long, default_value_t = 5)]
-    testratio : usize,
-    /// check if trained enough. [prefered: 0]
-    #[arg(long)]
-    #[structopt(allow_hyphen_values = true)]
-    autostop : Option<f64>,
-    /// parts to train. ex. 1,,0 means ending part.
-    #[arg(long)]
-    part : Option<String>,
-}
-
-/// csv text to get an array if each part will be trained or not.
-/// "", "0", "false", "no", "none", "off" and "zero" disables training.
-///
-/// ex. "" becomes [true, true, true]
-/// ex. "1,,0" becomes [true, false, false]
-/// ex. "-1,false,zero" becomes [true, false, false]
-fn partlist(txt : &Option<String>) -> [bool ; weight::N_PROGRESS_DIV] {
-    let mut ret = [true ; weight::N_PROGRESS_DIV];
-    if txt.is_none() {
-        return ret;
-    }
-
-    let txt = txt.as_ref().unwrap();
-    let disable = ["", "0", "false", "no", "none", "off", "zero"];
-    let txt_lo = txt.to_lowercase();
-    for (i, elem) in txt_lo.split(',').enumerate() {
-        if i >= weight::N_PROGRESS_DIV {break;}
-
-        ret[i] = disable.iter().find(|&&txt| txt == elem).is_none();
-    }
-    ret
-}
 
 fn net(vs : &nn::Path) -> impl Module {
     let relu = true;
@@ -345,14 +280,15 @@ fn epochspeed(
 }
 
 fn main() -> Result<(), tch::TchError> {
-    let arg = Arg::parse();
+    let arg = argument::Arg::parse();
 
     // let kifupath = "./kifu";
     // let mut boards = loadkifu(&findfiles(kifupath));
-    let kifudir = arg.kifudir.unwrap_or(String::from("kifu"));
+    let trainingpart = arg.partlist();
+    let kifudir = arg.kifudir.unwrap_or("kifu".to_string()).clone();
     let devtype = arg.device.unwrap_or("cpu".to_string());
-
-    let mut weights = weight::Weight::default();
+    let devtype = devtype.clone();
+    let mut weights = weight::Weight::box_new();
     if let Some(awei) = arg.weight {
         println!("load weight from {}", &awei);
         if let Err(err) = weights.read(&awei) {
@@ -360,14 +296,14 @@ fn main() -> Result<(), tch::TchError> {
         }
     }
 
-    let trainingpart = partlist(&arg.part);
-
+    let warmup = arg.warmup;
     for (prgs, en) in trainingpart.iter().enumerate() {
         if !*en {
             println!("progress[{prgs}] skipped.");
             continue;
         }
 
+        println!("part[{prgs}]");
         let mut boards = kifudir.split(",").flat_map(
             |d| loadkifu(&findfiles(&format!("./{d}")), d, prgs)
             ).collect();
@@ -411,29 +347,39 @@ fn main() -> Result<(), tch::TchError> {
         }
         let period = arg.anealing;
         let autostop = arg.autostop;
+        let datasize = target.size()[0];
+        println!("datasize: {datasize}");
+        let minibatch = if (datasize as i64) < 100 * testratio * arg.minibatch {
+                ((datasize  as i64 / 100 / testratio + 15) / 16) * 16
+            } else {
+                arg.minibatch
+            };
+        let minibatch = if minibatch > 0 {
+                minibatch
+            } else {
+                4
+            };
         println!("epoch:{}", arg.epoch);
         println!("eta:{eta}");
         println!("cosine aneaing:{period}");
-        println!("mini batch: {}", arg.minibatch);
+        println!("mini batch: {}", minibatch);
         println!("weight decay:{}", arg.wdecay);
         println!("test ratio:{testratio}");
         println!("auto stop:{autostop:?}");
         println!("training part: {trainingpart:?}");
+        println!("warmup: {warmup}");
         let start = std::time::Instant::now();
-        if period > 1 {
-            let mut sum_loss_prev = 99999999.9;
-            let mut sum_loss = 0.0;
-            for ep in 0..arg.epoch {
-                let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
-                optm.set_lr(
-                    eta * MIN_COSANEAL +
-                        eta * 0.5 * (1.0 - MIN_COSANEAL)
-                            * (1.0 + (std::f64::consts::PI * (ep as i32 % period) as f64 / (period - 1) as f64).cos())
-                );
+        if warmup > 1 {
+            for wep in 0..warmup {
+                let w_eta_min = eta * MIN_COSANEAL;
+                let a = (eta - w_eta_min) / warmup as f64;
+                optm.set_lr(w_eta_min + a * wep as f64);
+
+                let iloss = if inputs.len() > 1 {wep % inputs.len()} else {99999};
                 for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
                     if i == iloss {continue;}
 
-                    let mut dataset = Iter2::new(inp, tar, arg.minibatch);
+                    let mut dataset = Iter2::new(inp, tar, minibatch);
                     // let dataset = dataset.shuffle();
                     let dataset = dataset.shuffle().to_device(vs.device());
                     for (xs, ys) in dataset {
@@ -452,7 +398,43 @@ fn main() -> Result<(), tch::TchError> {
                         loss.double_value(&[])
                     };
                 let elapsed = start.elapsed();
-                print!("{}", &epochspeed(ep, arg.epoch, testloss, elapsed));
+                print!("{}", &epochspeed(wep, arg.epoch + warmup, testloss, elapsed));
+                std::io::stdout().flush().unwrap();
+            }
+        }
+        if period > 1 {
+            let mut sum_loss_prev = 99999999.9;
+            let mut sum_loss = 0.0;
+            for ep in 0..arg.epoch {
+                let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
+                optm.set_lr(
+                    eta * MIN_COSANEAL +
+                        eta * 0.5 * (1.0 - MIN_COSANEAL)
+                            * (1.0 + (std::f64::consts::PI * (ep as i32 % period) as f64 / (period - 1) as f64).cos())
+                );
+                for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
+                    if i == iloss {continue;}
+
+                    let mut dataset = Iter2::new(inp, tar, minibatch);
+                    // let dataset = dataset.shuffle();
+                    let dataset = dataset.shuffle().to_device(vs.device());
+                    for (xs, ys) in dataset {
+                        // println!("xs: {} {:?} ys: {} {:?}",
+                        //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                        let loss =
+                            nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                        optm.backward_step(&loss);
+                    }
+                }
+                let testloss = if testratio == 0 {
+                        0f64
+                    } else {
+                        let loss = nnet.forward(&inputs[iloss])
+                                .mse_loss(&targets[iloss], tch::Reduction::Mean);
+                        loss.double_value(&[])
+                    };
+                let elapsed = start.elapsed();
+                print!("{}", &epochspeed(ep + warmup, arg.epoch + warmup, testloss, elapsed));
                 std::io::stdout().flush().unwrap();
                 if let Some(threshold) = autostop {
                     sum_loss += testloss;
