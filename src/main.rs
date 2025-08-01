@@ -36,6 +36,39 @@ fn epochspeed(
         }
 }
 
+fn prepare_data(kifudir : &str, progress : usize) -> (tch::Tensor, tch::Tensor) {
+    let mut boards = kifudir.split(",").flat_map(
+        |d| data_loader::loadkifu(
+            &data_loader::findfiles(&format!("./{d}")), d, progress)
+        ).collect();
+
+    data_loader::dedupboards(&mut boards);
+    boards.shuffle(&mut rand::thread_rng());
+
+    let input = tch::Tensor::from_slice(
+        &data_loader::extractboards(&boards)).view((boards.len() as i64, INPUTSIZE));
+    println!("input : {} {:?}", input.dim(), input.size());
+
+    let target = tch::Tensor::from_slice(
+        &data_loader::extractscore(&boards)).view((boards.len() as i64, 1));
+    println!("target: {} {:?}", target.dim(), target.size());
+
+    (input, target)
+}
+
+fn adjust_minibatch(minibatch : i64, datasize : i64, testratio : i64) -> i64 {
+    let minibatch = if datasize < 100 * testratio * minibatch {
+                ((datasize  as i64 / 100 / testratio + 15) / 16) * 16
+            } else {
+                minibatch
+            };
+    if minibatch > 0 {
+        minibatch
+    } else {
+        4
+    }
+}
+
 fn main() -> Result<(), tch::TchError> {
     let arg = argument::Arg::parse();
 
@@ -45,6 +78,15 @@ fn main() -> Result<(), tch::TchError> {
     let kifudir = arg.kifudir.unwrap_or("kifu".to_string()).clone();
     let devtype = arg.device.unwrap_or("cpu".to_string());
     let devtype = devtype.clone();
+    let device = if devtype == "mps" && tch::utils::has_mps() {
+        Device::Mps      //  9h9m46s/100ep
+        // 2m36s/100ep/18907b
+    } else if devtype == "cuda" && tch::utils::has_cuda() {
+        Device::Cuda(0)
+    } else {
+        Device::Cpu      // 13m0s/100ep/1516288b
+        // 13s/100ep/18907b
+    };
     let mut weights = weight::Weight::default();
     if let Some(awei) = arg.weight {
         println!("load weight from {}", &awei);
@@ -53,6 +95,10 @@ fn main() -> Result<(), tch::TchError> {
         }
     }
 
+    let autostop = arg.autostop;
+    let eta = arg.eta;
+    let period = arg.anealing;
+    let testratio = arg.testratio as i64;
     let warmup = arg.warmup;
     for (prgs, en) in trainingpart.iter().enumerate() {
         if !*en {
@@ -61,35 +107,11 @@ fn main() -> Result<(), tch::TchError> {
         }
 
         println!("part[{prgs}]");
-        let mut boards = kifudir.split(",").flat_map(
-            |d| data_loader::loadkifu(
-                &data_loader::findfiles(&format!("./{d}")), d, prgs)
-            ).collect();
 
-        data_loader::dedupboards(&mut boards);
-        boards.shuffle(&mut rand::thread_rng());
-        let testratio = arg.testratio as i64;
-
-        let input = tch::Tensor::from_slice(
-            &data_loader::extractboards(&boards)).view((boards.len() as i64, INPUTSIZE));
-        println!("input : {} {:?}", input.dim(), input.size());
-
-        let target = tch::Tensor::from_slice(
-            &data_loader::extractscore(&boards)).view((boards.len() as i64, 1));
-        println!("target: {} {:?}", target.dim(), target.size());
-
+        let (input, target) = prepare_data(&kifudir, prgs);
         let inputs = input.chunk(testratio, 0);
         let targets = target.chunk(testratio, 0);
 
-        let device = if devtype == "mps" && tch::utils::has_mps() {
-            Device::Mps      //  9h9m46s/100ep
-            // 2m36s/100ep/18907b
-        } else if devtype == "cuda" && tch::utils::has_cuda() {
-            Device::Cuda(0)
-        } else {
-            Device::Cpu      // 13m0s/100ep/1516288b
-            // 13s/100ep/18907b
-        };
         let mut vs = VarStore::new(device);
         let nnet = neuralnet::net(&vs.root());
 
@@ -97,26 +119,17 @@ fn main() -> Result<(), tch::TchError> {
             panic!("{err}");
         }
 
-        let eta = arg.eta;
         let mut optm = nn::AdamW::default().build(&vs, eta)?;
         optm.set_weight_decay(arg.wdecay);
+
         for (key, t) in vs.variables().iter_mut() {
             println!("{key}:{:?}", t.size());
         }
-        let period = arg.anealing;
-        let autostop = arg.autostop;
         let datasize = target.size()[0];
         println!("datasize: {datasize}");
-        let minibatch = if (datasize as i64) < 100 * testratio * arg.minibatch {
-                ((datasize  as i64 / 100 / testratio + 15) / 16) * 16
-            } else {
-                arg.minibatch
-            };
-        let minibatch = if minibatch > 0 {
-                minibatch
-            } else {
-                4
-            };
+
+        let minibatch = adjust_minibatch(arg.minibatch, datasize, testratio);
+
         println!("epoch:{}", arg.epoch);
         println!("eta:{eta}");
         println!("cosine aneaing:{period}");
@@ -126,6 +139,7 @@ fn main() -> Result<(), tch::TchError> {
         println!("auto stop:{autostop:?}");
         println!("training part: {trainingpart:?}");
         println!("warmup: {warmup}");
+
         let start = std::time::Instant::now();
         if warmup > 1 {
             for wep in 0..warmup {
