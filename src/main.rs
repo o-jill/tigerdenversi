@@ -69,6 +69,12 @@ fn adjust_minibatch(minibatch : i64, datasize : i64, testratio : i64) -> i64 {
     }
 }
 
+fn anealing_learning_rate(eta : f64, ep : usize, period : i32) -> f64 {
+    eta * MIN_COSANEAL +
+        eta * 0.5 * (1.0 - MIN_COSANEAL)
+            * (1.0 + (std::f64::consts::PI * (ep as i32 % period) as f64 / (period - 1) as f64).cos())
+}
+
 fn main() -> Result<(), tch::TchError> {
     let arg = argument::Arg::parse();
 
@@ -133,7 +139,7 @@ fn main() -> Result<(), tch::TchError> {
         println!("epoch:{}", arg.epoch);
         println!("eta:{eta}");
         println!("cosine aneaing:{period}");
-        println!("mini batch: {}", minibatch);
+        println!("mini batch: {minibatch}");
         println!("weight decay:{}", arg.wdecay);
         println!("test ratio:{testratio}");
         println!("auto stop:{autostop:?}");
@@ -174,16 +180,12 @@ fn main() -> Result<(), tch::TchError> {
                 std::io::stdout().flush().unwrap();
             }
         }
-        if period > 1 {
+        if period > 1 {  // cos anealing
             let mut sum_loss_prev = 99999999.9;
             let mut sum_loss = 0.0;
             for ep in 0..arg.epoch {
                 let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
-                optm.set_lr(
-                    eta * MIN_COSANEAL +
-                        eta * 0.5 * (1.0 - MIN_COSANEAL)
-                            * (1.0 + (std::f64::consts::PI * (ep as i32 % period) as f64 / (period - 1) as f64).cos())
-                );
+                optm.set_lr(anealing_learning_rate(eta, ep, period));
                 for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
                     if i == iloss {continue;}
 
