@@ -1,5 +1,7 @@
 use super::*;
 
+const INPUTSIZE :i64 = weight::N_INPUT as i64;
+
 // list up kifu
 pub fn findfiles(kifupath : &str) -> Vec<String> {
     let dir = std::fs::read_dir(kifupath).unwrap();
