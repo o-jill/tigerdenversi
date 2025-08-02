@@ -58,7 +58,7 @@ fn prepare_data(kifudir : &str, progress : usize) -> (tch::Tensor, tch::Tensor) 
 
 fn adjust_minibatch(minibatch : i64, datasize : i64, testratio : i64) -> i64 {
     let minibatch = if datasize < 100 * testratio * minibatch {
-                ((datasize  as i64 / 100 / testratio + 15) / 16) * 16
+                ((datasize / 100 / testratio + 15) / 16) * 16
             } else {
                 minibatch
             };
@@ -73,6 +73,133 @@ fn anealing_learning_rate(eta : f64, ep : usize, period : i32) -> f64 {
     eta * MIN_COSANEAL +
         eta * 0.5 * (1.0 - MIN_COSANEAL)
             * (1.0 + (std::f64::consts::PI * (ep as i32 % period) as f64 / (period - 1) as f64).cos())
+}
+
+fn warmup_sequence(nnet : &impl nn::Module,
+        vs : &mut VarStore, optm : &mut tch::nn::Optimizer, inputs : &[Tensor], targets : &[Tensor],
+        elapsedtimer : &std::time::Instant,
+        warmup : usize, eta : f64, minibatch : i64, epochs : usize) {
+    if warmup < 1 {return;}
+
+    let testratio = inputs.len();
+    for wep in 0..warmup {
+        let w_eta_min = eta * MIN_COSANEAL;
+        let a = (eta - w_eta_min) / warmup as f64;
+        optm.set_lr(w_eta_min + a * wep as f64);
+
+        let iloss = if inputs.len() > 1 {wep % testratio} else {99999};
+        for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
+            if i == iloss {continue;}
+
+            let mut dataset = Iter2::new(inp, tar, minibatch);
+            // let dataset = dataset.shuffle();
+            let dataset = dataset.shuffle().to_device(vs.device());
+            for (xs, ys) in dataset {
+                // println!("xs: {} {:?} ys: {} {:?}",
+                //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                let loss =
+                    nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                optm.backward_step(&loss);
+            }
+        }
+        let testloss = if testratio == 0 {
+                0f64
+            } else {
+                let loss = nnet.forward(&inputs[iloss])
+                        .mse_loss(&targets[iloss], tch::Reduction::Mean);
+                loss.double_value(&[])
+            };
+        let elapsed = elapsedtimer.elapsed();
+        print!("{}", &epochspeed(wep, epochs + warmup, testloss, elapsed));
+        std::io::stdout().flush().unwrap();
+    }
+}
+
+fn cos_anealing_sequence(nnet : &impl nn::Module,
+        vs : &mut VarStore, optm : &mut tch::nn::Optimizer, inputs : &[Tensor], targets : &[Tensor],
+        elapsedtimer : &std::time::Instant,
+        warmup : usize, eta : f64, minibatch : i64, epochs : usize, period : i32, autostop : Option<f64>) {
+    let mut sum_loss_prev = 99999999.9;
+    let mut sum_loss = 0.0;
+    let testratio = inputs.len();
+    for ep in 0..epochs {
+        let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
+        optm.set_lr(anealing_learning_rate(eta, ep, period));
+        for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
+            if i == iloss {continue;}
+
+            let mut dataset = Iter2::new(inp, tar, minibatch);
+            // let dataset = dataset.shuffle();
+            let dataset = dataset.shuffle().to_device(vs.device());
+            for (xs, ys) in dataset {
+                // println!("xs: {} {:?} ys: {} {:?}",
+                //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                let loss =
+                    nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                optm.backward_step(&loss);
+            }
+        }
+        let testloss = if testratio == 0 {
+                0f64
+            } else {
+                let loss = nnet.forward(&inputs[iloss])
+                        .mse_loss(&targets[iloss], tch::Reduction::Mean);
+                loss.double_value(&[])
+            };
+        let elapsed = elapsedtimer.elapsed();
+        print!("{}", &epochspeed(ep + warmup, epochs + warmup, testloss, elapsed));
+        std::io::stdout().flush().unwrap();
+
+        if autostop.is_none() {continue;}
+
+        let threshold = autostop.unwrap();
+        sum_loss += testloss;
+        if (ep + 1) % (testratio as i32 * period) as usize == 0 {
+            println!("\nsum_loss{}:{sum_loss}", ep + 1);
+
+            if  sum_loss_prev - sum_loss > threshold {
+                sum_loss_prev = sum_loss;
+                sum_loss = 0.0;
+            } else {
+                println!("done as a result of learning enough.");
+                break;
+            }
+        }
+    }
+}
+
+fn std_sequence(nnet : &impl nn::Module,
+        vs : &mut VarStore, optm : &mut tch::nn::Optimizer, inputs : &[Tensor], targets : &[Tensor],
+        elapsedtimer : &std::time::Instant, minibatch : i64, epochs : usize) {
+    let testratio = inputs.len();
+    for ep in 0..epochs {
+        let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
+        for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
+            if i == iloss {continue;}
+
+            let mut dataset = Iter2::new(inp, tar, minibatch);
+            // let dataset = dataset.shuffle();
+            let dataset = dataset.shuffle().to_device(vs.device());
+            // let mut loss = tch::Tensor::new();
+            for (xs, ys) in dataset {
+                // println!("xs: {} {:?} ys: {} {:?}",
+                //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                let loss =
+                    nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                optm.backward_step(&loss);
+            }
+        }
+        let testloss = if testratio == 0 {
+            0f64
+        } else {
+            let loss = nnet.forward(&inputs[iloss])
+                    .mse_loss(&targets[iloss], tch::Reduction::Mean);
+            loss.double_value(&[])
+        };
+        let elapsed = elapsedtimer.elapsed();
+        print!("{}", &epochspeed(ep, epochs, testloss, elapsed));
+        std::io::stdout().flush().unwrap();
+    }
 }
 
 fn main() -> Result<(), tch::TchError> {
@@ -147,113 +274,19 @@ fn main() -> Result<(), tch::TchError> {
         println!("warmup: {warmup}");
 
         let start = std::time::Instant::now();
-        if warmup > 1 {
-            for wep in 0..warmup {
-                let w_eta_min = eta * MIN_COSANEAL;
-                let a = (eta - w_eta_min) / warmup as f64;
-                optm.set_lr(w_eta_min + a * wep as f64);
 
-                let iloss = if inputs.len() > 1 {wep % inputs.len()} else {99999};
-                for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
-                    if i == iloss {continue;}
-
-                    let mut dataset = Iter2::new(inp, tar, minibatch);
-                    // let dataset = dataset.shuffle();
-                    let dataset = dataset.shuffle().to_device(vs.device());
-                    for (xs, ys) in dataset {
-                        // println!("xs: {} {:?} ys: {} {:?}",
-                        //          xs.dim(), xs.size(), ys.dim(), ys.size());
-                        let loss =
-                            nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
-                        optm.backward_step(&loss);
-                    }
-                }
-                let testloss = if testratio == 0 {
-                        0f64
-                    } else {
-                        let loss = nnet.forward(&inputs[iloss])
-                                .mse_loss(&targets[iloss], tch::Reduction::Mean);
-                        loss.double_value(&[])
-                    };
-                let elapsed = start.elapsed();
-                print!("{}", &epochspeed(wep, arg.epoch + warmup, testloss, elapsed));
-                std::io::stdout().flush().unwrap();
-            }
-        }
         if period > 1 {  // cos anealing
-            let mut sum_loss_prev = 99999999.9;
-            let mut sum_loss = 0.0;
-            for ep in 0..arg.epoch {
-                let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
-                optm.set_lr(anealing_learning_rate(eta, ep, period));
-                for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
-                    if i == iloss {continue;}
+            warmup_sequence(
+                &nnet, &mut vs, &mut optm, &inputs, &targets, &start,
+                warmup, eta, minibatch, arg.epoch);
 
-                    let mut dataset = Iter2::new(inp, tar, minibatch);
-                    // let dataset = dataset.shuffle();
-                    let dataset = dataset.shuffle().to_device(vs.device());
-                    for (xs, ys) in dataset {
-                        // println!("xs: {} {:?} ys: {} {:?}",
-                        //          xs.dim(), xs.size(), ys.dim(), ys.size());
-                        let loss =
-                            nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
-                        optm.backward_step(&loss);
-                    }
-                }
-                let testloss = if testratio == 0 {
-                        0f64
-                    } else {
-                        let loss = nnet.forward(&inputs[iloss])
-                                .mse_loss(&targets[iloss], tch::Reduction::Mean);
-                        loss.double_value(&[])
-                    };
-                let elapsed = start.elapsed();
-                print!("{}", &epochspeed(ep + warmup, arg.epoch + warmup, testloss, elapsed));
-                std::io::stdout().flush().unwrap();
-                if let Some(threshold) = autostop {
-                    sum_loss += testloss;
-                    if (ep + 1) % (testratio as i32 * period) as usize == 0 {
-                        println!("\nsum_loss{}:{sum_loss}", ep + 1);
-
-                        if  sum_loss_prev - sum_loss > threshold {
-                            sum_loss_prev = sum_loss;
-                            sum_loss = 0.0;
-                        } else {
-                            println!("done as a result of learning enough.");
-                            break;
-                        }
-                    }
-                }
-            }
+            cos_anealing_sequence(
+                &nnet, &mut vs, &mut optm, &inputs, &targets, &start,
+                warmup, eta, minibatch, arg.epoch, period, autostop);
         } else {
-            for ep in 0..arg.epoch {
-                let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
-                for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
-                    if i == iloss {continue;}
-
-                    let mut dataset = Iter2::new(inp, tar, arg.minibatch);
-                    // let dataset = dataset.shuffle();
-                    let dataset = dataset.shuffle().to_device(vs.device());
-                    // let mut loss = tch::Tensor::new();
-                    for (xs, ys) in dataset {
-                        // println!("xs: {} {:?} ys: {} {:?}",
-                        //          xs.dim(), xs.size(), ys.dim(), ys.size());
-                        let loss =
-                            nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
-                        optm.backward_step(&loss);
-                    }
-                }
-                let testloss = if testratio == 0 {
-                    0f64
-                } else {
-                    let loss = nnet.forward(&inputs[iloss])
-                            .mse_loss(&targets[iloss], tch::Reduction::Mean);
-                    loss.double_value(&[])
-                };
-                let elapsed = start.elapsed();
-                print!("{}", &epochspeed(ep, arg.epoch, testloss, elapsed));
-                std::io::stdout().flush().unwrap();
-            }
+            std_sequence(
+                &nnet, &mut vs, &mut optm, &inputs, &targets, &start,
+                minibatch, arg.epoch);
         }
         println!();
 
