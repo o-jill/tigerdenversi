@@ -32,7 +32,7 @@ impl std::fmt::Display for Training {
 
 impl From<argument::Arg> for Training {
     fn from(arg : argument::Arg) -> Self {
-        let partlist = arg.partlist();
+        let partlist = Self::partlist(&arg.part);
         let kifudir = arg.kifudir.unwrap_or("kifu".to_string()).clone();
         let devtype = arg.device.unwrap_or("cpu".to_string());
         let devtype = devtype.clone();
@@ -72,6 +72,29 @@ impl From<argument::Arg> for Training {
 }
 
 impl Training {
+    /// csv text to get an array if each part will be trained or not.
+    /// "", "0", "false", "no", "none", "off" and "zero" disables training.
+    ///
+    /// ex. "" becomes [true, true, true]
+    /// ex. "1,,0" becomes [true, false, false]
+    /// ex. "-1,false,zero" becomes [true, false, false]
+    fn partlist(part : &Option<String>) -> Vec<bool> {
+        let mut ret = vec![true ; weight::N_PROGRESS_DIV];
+        if part.is_none() {
+            return ret;
+        }
+
+        let txt = part.as_ref().unwrap();
+        let disable = ["", "0", "false", "no", "none", "off", "zero"];
+        let txt_lo = txt.to_lowercase();
+        for (i, elem) in txt_lo.split(',').enumerate() {
+            if i >= weight::N_PROGRESS_DIV {break;}
+
+            ret[i] = disable.contains(&elem);
+        }
+        ret
+    }
+
     fn anealing_learning_rate(&self, ep : usize) -> f64 {
         let eta = self.eta;
         let period = self.period;
