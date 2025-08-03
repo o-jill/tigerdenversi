@@ -22,17 +22,22 @@ const N_WEIGHT_LAYER2BIAS : usize = N_WEIGHT_LAYER2 + N_HIDDEN2;
 pub const N_WEIGHT : usize =
   (N_INPUT + 1) * N_HIDDEN + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
 
-const N_WEIGHT_PAD :usize = ((N_WEIGHT + 7) / 8) * 8;
+const N_WEIGHT_PAD :usize = N_WEIGHT.div_ceil(8);
 pub const N_PROGRESS_DIV : usize = 3;
 
 #[allow(dead_code)]
 const WSZV1 : usize = (bitboard::CELL_2D + 1 + 1) * 4 + 4 + 1;
 #[allow(dead_code)]
 const WSZV2 : usize = WSZV1;
+#[allow(dead_code)]
 const WSZV3 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * 4 + 4 + 1;
+#[allow(dead_code)]
 const WSZV4 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * 8 + 8 + 1;
+#[allow(dead_code)]
 const WSZV5 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * 16 + 16 + 1;
+#[allow(dead_code)]
 const WSZV6 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * 32 + 32 + 1;
+#[allow(dead_code)]
 const WSZV7 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * 32
         + (32 + 1) * 16 + 16 + 1;
 // ^^^^^ sigmoid
@@ -92,6 +97,7 @@ impl EvalFile {
         }
     }
 
+    #[allow(dead_code)]
     pub fn latest_header() -> String {
         format!("# x{N_PROGRESS_DIV} 64+1+2-{N_HIDDEN}-{N_HIDDEN2}-1")
     }
@@ -154,11 +160,13 @@ impl Weight {
       &self.weight[offset + N_WEIGHT_FIXST_B..offset + N_WEIGHT_INPUTBIAS]
     }
 
+    #[allow(dead_code)]
     pub fn wfixedstone_b(&self, progress : usize) -> &[f32] {
         let offset = progress * N_WEIGHT_PAD;
         &self.weight[offset + N_WEIGHT_FIXST_B..offset + N_WEIGHT_FIXST_W]
     }
 
+    #[allow(dead_code)]
     pub fn wfixedstone_w(&self, progress : usize) -> &[f32] {
         let offset = progress * N_WEIGHT_PAD;
         &self.weight[offset + N_WEIGHT_FIXST_W..offset + N_WEIGHT_INPUTBIAS]

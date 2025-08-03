@@ -2387,7 +2387,7 @@ fn testbitbrd() {
     ];
     for (y, &revchk) in revchktbl.iter().enumerate().take(NUMCELL - 2) {
         let ban = BitBoard::from(revchk).unwrap();
-        print!("({}{})", NUMCELL, NUMCELL);
+        print!("({NUMCELL}{NUMCELL})");
         assert!(ban.checkreverse(NUMCELL - 1, NUMCELL - 1));
         ban.put();
         let ban = ban.r#move(NUMCELL as u8, NUMCELL as u8).unwrap();
@@ -2399,7 +2399,7 @@ fn testbitbrd() {
         assert_eq!(ban.white.count_ones(), 0);
         let ban = BitBoard::from(revchk).unwrap();
         let ban90 = ban.rotate90();
-        print!("({}{})", NUMCELL, 1);
+        print!("({NUMCELL}1)");
         ban90.put();
         assert!(ban90.checkreverse(NUMCELL - 1, 0));
         let ban = ban90.r#move(NUMCELL as u8, 1).unwrap();
@@ -2410,7 +2410,7 @@ fn testbitbrd() {
         assert_eq!(ban.white.count_ones(), 0);
         let ban = BitBoard::from(revchk).unwrap();
         let ban180 = ban.rotate180();
-        print!("({}{})", 1, 1);
+        print!("(11)");
         assert!(ban180.checkreverse(0, 0));
         let ban = ban180.r#move(1, 1).unwrap();
         ban.put();
@@ -2420,7 +2420,7 @@ fn testbitbrd() {
         assert_eq!(ban.black.count_ones(), (y + 3) as u32);
         assert_eq!(ban.white.count_ones(), 0);
         let banm90 = ban180.rotate90();
-        print!("({}{})", 1, NUMCELL);
+        print!("(1{NUMCELL})");
         assert!(banm90.checkreverse(0, NUMCELL - 1));
         let ban = banm90.r#move(1, NUMCELL as u8).unwrap();
         ban.put();
@@ -3687,7 +3687,7 @@ fn testbitbrd() {
     ];
     for (y, &revchk) in revchktbl.iter().enumerate().take(NUMCELL - 2) {
         let ban = BitBoard::from(revchk).unwrap();
-        print!("({}{})", NUMCELL, NUMCELL);
+        print!("({NUMCELL}{NUMCELL})");
         assert!(ban.checkreverse(NUMCELL - 1, NUMCELL - 1));
         ban.put();
         let ban = ban.r#move(NUMCELL as u8, NUMCELL as u8).unwrap();
@@ -3699,7 +3699,7 @@ fn testbitbrd() {
         assert_eq!(ban.white.count_ones(), 0);
         let ban = BitBoard::from(revchk).unwrap();
         let ban90 = ban.rotate90();
-        print!("({}{})", NUMCELL, 1);
+        print!("({NUMCELL}1)");
         ban90.put();
         assert!(ban90.checkreverse(NUMCELL - 1, 0));
         let ban = ban90.r#move(NUMCELL as u8, 1).unwrap();
@@ -3710,7 +3710,7 @@ fn testbitbrd() {
         assert_eq!(ban.white.count_ones(), 0);
         let ban = BitBoard::from(revchk).unwrap();
         let ban180 = ban.rotate180();
-        print!("({}{})", 1, 1);
+        print!("(11)");
         assert!(ban180.checkreverse(0, 0));
         let ban = ban180.r#move(1, 1).unwrap();
         ban.put();
@@ -3720,7 +3720,7 @@ fn testbitbrd() {
         assert_eq!(ban.black.count_ones(), 8);
         assert_eq!(ban.white.count_ones(), 0);
         let banm90 = ban180.rotate90();
-        print!("({}{})", 1, NUMCELL);
+        print!("({NUMCELL})");
         assert!(banm90.checkreverse(0, NUMCELL - 1));
         let ban = banm90.r#move(1, NUMCELL as u8).unwrap();
         ban.put();
@@ -4987,7 +4987,7 @@ fn testbitbrd() {
     ];
     for (y, &revchk) in revchktbl.iter().enumerate().take(NUMCELL - 2) {
         let ban = BitBoard::from(revchk).unwrap();
-        print!("({}{})", NUMCELL, NUMCELL);
+        print!("({NUMCELL}{NUMCELL})");
         assert!(ban.checkreverse(NUMCELL - 1, NUMCELL - 1));
         ban.put();
         let ban = ban.r#move(NUMCELL as u8, NUMCELL as u8).unwrap();
@@ -4999,7 +4999,7 @@ fn testbitbrd() {
         assert_eq!(ban.white.count_ones(), (NUMCELL - 3 - y) as u32);
         let ban = BitBoard::from(revchk).unwrap();
         let ban90 = ban.rotate90();
-        print!("({}{})", NUMCELL, 1);
+        print!("({NUMCELL}1)");
         ban90.put();
         assert!(ban90.checkreverse(NUMCELL - 1, 0));
         let ban = ban90.r#move(NUMCELL as u8, 1).unwrap();
@@ -5010,7 +5010,7 @@ fn testbitbrd() {
         assert_eq!(ban.white.count_ones(), (NUMCELL - 3 - y) as u32);
         let ban = BitBoard::from(revchk).unwrap();
         let ban180 = ban.rotate180();
-        print!("({}{})", 1, 1);
+        print!("(11)");
         assert!(ban180.checkreverse(0, 0));
         let ban = ban180.r#move(1, 1).unwrap();
         ban.put();
