@@ -65,7 +65,7 @@ impl Arg {
         for (i, elem) in txt_lo.split(',').enumerate() {
             if i >= weight::N_PROGRESS_DIV {break;}
 
-            ret[i] = disable.iter().any(|&txt| txt == elem);
+            ret[i] = disable.contains(&elem);
         }
         ret
     }
