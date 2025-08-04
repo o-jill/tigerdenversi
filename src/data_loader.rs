@@ -25,56 +25,51 @@ pub fn findfiles(kifupath : &str) -> Vec<String> {
 
 pub fn loadkifu(files : &[String], d : &str, progress : usize)
         -> Vec<(bitboard::BitBoard, i8, i8, i8, i8)> {
-    let mut boards : Vec<(bitboard::BitBoard, i8, i8, i8, i8)> = Vec::new();
-    for fname in files.iter() {
-        let path = format!("{d}/{fname}");
+    // let sta = std::time::Instant::now();
+    let mut boards = files.par_iter().flat_map(|fname| {
+        let path = format!("{}/{}", d, fname);
         print!("{path}\r");
         let content = std::fs::read_to_string(&path).unwrap();
-        let lines:Vec<&str> = content.split('\n').collect();
+        let lines: Vec<&str> = content.split('\n').collect();
         let kifu = kifu::Kifu::from(&lines);
-        for t in kifu.list.iter() {
+        kifu.list.par_iter().filter_map(|t| {
             let ban = bitboard::BitBoard::from(&t.rfen).unwrap();
-            if ban.is_full() {continue;}
-            if !ban.is_progress(progress) {continue;}
+            if ban.is_full() || !ban.is_progress(progress) {return None;}
 
             let (fsb, fsw) = ban.fixedstones();
-
-            let ban90 = ban.rotate90();
-            let ban180 = ban.rotate180();
-            let ban270 = ban180.rotate90();
-            let banh = ban.flip_horz();
-            let banv = ban.flip_vert();
-            let banfa = ban.flip_all();
-            let ban90fa = ban90.flip_all();
-            let ban180fa = ban180.flip_all();
-            let ban270fa = ban270.flip_all();
-            let banhfa = banh.flip_all();
-            let banvfa = banv.flip_all();
             let score = kifu.score.unwrap();
-            boards.push((ban, t.teban, fsb, fsw, score));
-            boards.push((ban90, t.teban, fsb, fsw, score));
-            boards.push((ban180, t.teban, fsb, fsw, score));
-            boards.push((ban270, t.teban, fsb, fsw, score));
-            boards.push((banh, t.teban, fsb, fsw, score));
-            boards.push((banv, t.teban, fsb, fsw, score));
-            /* flip color */
-            boards.push((banfa, -t.teban, fsw, fsb, -score));
-            boards.push((ban90fa, -t.teban, fsw, fsb, -score));
-            boards.push((ban180fa, -t.teban, fsw, fsb, -score));
-            boards.push((ban270fa, -t.teban, fsw, fsb, -score));
-            boards.push((banhfa, -t.teban, fsw, fsb, -score));
-            boards.push((banvfa, -t.teban, fsw, fsb, -score));
-        }
-    }
+            // オーグメンテーション
+            let mut v = Vec::with_capacity(12);
+            v.push((ban.clone(), t.teban, fsb, fsw, score));
+            v.push((ban.rotate90(), t.teban, fsb, fsw, score));
+            v.push((ban.rotate180(), t.teban, fsb, fsw, score));
+            v.push((ban.rotate180().rotate90(), t.teban, fsb, fsw, score));
+            v.push((ban.flip_horz(), t.teban, fsb, fsw, score));
+            v.push((ban.flip_vert(), t.teban, fsb, fsw, score));
+            // flip color
+            v.push((ban.flip_all(), -t.teban, fsw, fsb, -score));
+            v.push((ban.rotate90().flip_all(), -t.teban, fsw, fsb, -score));
+            v.push((ban.rotate180().flip_all(), -t.teban, fsw, fsb, -score));
+            v.push((ban.rotate180().rotate90().flip_all(),
+                -t.teban, fsw, fsb, -score));
+            v.push((ban.flip_horz().flip_all(), -t.teban, fsw, fsb, -score));
+            v.push((ban.flip_vert().flip_all(), -t.teban, fsw, fsb, -score));
+            Some(v)
+        }).flatten().collect::<Vec<_>>()
+    }).collect();
     println!();
+    // println!("{}usec",sta.elapsed().as_micros());
     boards
 }
 
 pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8, i8, i8, i8)>) {
+    // println!("board: {} boards", boards.len());
+    // let sta = std::time::Instant::now();
     boards.sort_by(|a, b| {
         a.0.black.cmp(&b.0.black).then(a.0.white.cmp(&b.0.white))
     });
     boards.dedup_by(|a, b| {a == b});
+    // println!("{}usec",sta.elapsed().as_micros());
     println!("board: {} boards", boards.len());
 }
 

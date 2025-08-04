@@ -127,6 +127,7 @@ impl Training {
     }
 
     fn prepare_data(&self, progress : usize) -> (tch::Tensor, tch::Tensor) {
+        // let sta = std::time::Instant::now();
         let mut boards = self.kifudir.split(",").flat_map(
             |d| data_loader::loadkifu(
                 &data_loader::findfiles(&format!("./{d}")), d, progress)
@@ -134,6 +135,7 @@ impl Training {
 
         data_loader::dedupboards(&mut boards);
         boards.shuffle(&mut rand::thread_rng());
+        // println!("{}msec",sta.elapsed().as_millis());
 
         let input = tch::Tensor::from_slice(
             &data_loader::extractboards(&boards)).view((boards.len() as i64, INPUTSIZE));
