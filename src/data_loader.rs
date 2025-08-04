@@ -1,22 +1,25 @@
 use super::*;
+use rayon::prelude::*;
 
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
 
 // list up kifu
 pub fn findfiles(kifupath : &str) -> Vec<String> {
+    // let sta = std::time::Instant::now();
     let dir = std::fs::read_dir(kifupath).unwrap();
     let mut files = dir.filter_map(|entry| {
         entry.ok().and_then(|e|
             e.path().file_name().map(|n|
                 n.to_str().unwrap().to_string()
             )
-        )}).collect::<Vec<String>>().iter().filter(|&fnm| {
+        )}).filter(|fnm| {
             fnm.contains("kifu")
             // fnm.contains(".txt")
-        }).cloned().collect::<Vec<String>>();
+        }).collect::<Vec<String>>();
     // println!("{:?}", files);
 
     files.sort();
+    // println!("{}usec",sta.elapsed().as_micros());
     files
 }
 
