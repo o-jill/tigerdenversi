@@ -26,8 +26,8 @@ pub fn findfiles(kifupath : &str) -> Vec<String> {
 pub fn loadkifu(files : &[String], d : &str, progress : usize)
         -> Vec<(bitboard::BitBoard, i8, i8, i8, i8)> {
     // let sta = std::time::Instant::now();
-    let mut boards = files.par_iter().flat_map(|fname| {
-        let path = format!("{}/{}", d, fname);
+    let boards = files.par_iter().flat_map(|fname| {
+        let path = format!("{d}/{fname}");
         print!("{path}\r");
         let content = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();
@@ -38,23 +38,22 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize)
 
             let (fsb, fsw) = ban.fixedstones();
             let score = kifu.score.unwrap();
-            // オーグメンテーション
-            let mut v = Vec::with_capacity(12);
-            v.push((ban.clone(), t.teban, fsb, fsw, score));
-            v.push((ban.rotate90(), t.teban, fsb, fsw, score));
-            v.push((ban.rotate180(), t.teban, fsb, fsw, score));
-            v.push((ban.rotate180().rotate90(), t.teban, fsb, fsw, score));
-            v.push((ban.flip_horz(), t.teban, fsb, fsw, score));
-            v.push((ban.flip_vert(), t.teban, fsb, fsw, score));
-            // flip color
-            v.push((ban.flip_all(), -t.teban, fsw, fsb, -score));
-            v.push((ban.rotate90().flip_all(), -t.teban, fsw, fsb, -score));
-            v.push((ban.rotate180().flip_all(), -t.teban, fsw, fsb, -score));
-            v.push((ban.rotate180().rotate90().flip_all(),
-                -t.teban, fsw, fsb, -score));
-            v.push((ban.flip_horz().flip_all(), -t.teban, fsw, fsb, -score));
-            v.push((ban.flip_vert().flip_all(), -t.teban, fsw, fsb, -score));
-            Some(v)
+            Some(vec![
+                (ban.clone(), t.teban, fsb, fsw, score),
+                // オーグメンテーション
+                (ban.rotate90(), t.teban, fsb, fsw, score),
+                (ban.rotate180(), t.teban, fsb, fsw, score),
+                (ban.rotate180().rotate90(), t.teban, fsb, fsw, score),
+                (ban.flip_horz(), t.teban, fsb, fsw, score),
+                (ban.flip_vert(), t.teban, fsb, fsw, score),
+                // flip color
+                (ban.flip_all(), -t.teban, fsw, fsb, -score),
+                (ban.rotate90().flip_all(), -t.teban, fsw, fsb, -score),
+                (ban.rotate180().flip_all(), -t.teban, fsw, fsb, -score),
+                (ban.rotate180().rotate90().flip_all(), -t.teban, fsw, fsb, -score),
+                (ban.flip_horz().flip_all(), -t.teban, fsw, fsb, -score),
+                (ban.flip_vert().flip_all(), -t.teban, fsw, fsb, -score)
+            ])
         }).flatten().collect::<Vec<_>>()
     }).collect();
     println!();
