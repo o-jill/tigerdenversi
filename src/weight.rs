@@ -22,7 +22,7 @@ const N_WEIGHT_LAYER2BIAS : usize = N_WEIGHT_LAYER2 + N_HIDDEN2;
 pub const N_WEIGHT : usize =
   (N_INPUT + 1) * N_HIDDEN + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
 
-const N_WEIGHT_PAD :usize = N_WEIGHT.div_ceil(8);
+const N_WEIGHT_PAD :usize = N_WEIGHT.div_ceil(8) * 8;
 pub const N_PROGRESS_DIV : usize = 3;
 
 #[allow(dead_code)]
