@@ -43,4 +43,7 @@ pub struct Arg {
     /// epochs for warmup sequence.
     #[arg(long, default_value_t = 0)]
     pub warmup : usize,
+    /// weight decay for every cos-anealing period
+    #[arg(long, default_value_t = 0.001)]
+    pub awdecay : f64,
 }
