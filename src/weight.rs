@@ -157,7 +157,7 @@ impl Weight {
 
     pub fn wfixedstones(&self, progress : usize) -> &[f32] {
         let offset = progress * N_WEIGHT_PAD;
-      &self.weight[offset + N_WEIGHT_FIXST_B..offset + N_WEIGHT_INPUTBIAS]
+        &self.weight[offset + N_WEIGHT_FIXST_B..offset + N_WEIGHT_INPUTBIAS]
     }
 
     #[allow(dead_code)]
@@ -222,8 +222,8 @@ impl Weight {
                             continue;
                         }
                         let res = EvalFile::from(&l);
-                        if res.is_some() {
-                            format = res.unwrap();
+                        if let Some(fmt) = res {
+                            format = fmt;
                         }
                         continue;
                     }
