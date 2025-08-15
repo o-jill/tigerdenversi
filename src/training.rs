@@ -100,7 +100,7 @@ impl Training {
     fn anealing_learning_rate(&self, ep : usize) -> f64 {
         let period = self.period;
         let caperiod = ep as i32 / period;
-        let eta = self.eta * (1.0 - self.awdecay).powi(caperiod as i32);
+        let eta = self.eta * (1.0 - self.awdecay).powi(caperiod);
         eta * MIN_COSANEAL +
             eta * 0.5 * (1.0 - MIN_COSANEAL)
                 * (1.0 + (std::f64::consts::PI * (ep as i32 % period) as f64
