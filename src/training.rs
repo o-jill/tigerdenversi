@@ -21,6 +21,7 @@ pub struct Training {
     testratio : i64,
     warmup : usize,
     wdecay : f64,
+    awdecay : f64,
     weights : weight::Weight,
 }
 
@@ -66,6 +67,7 @@ impl From<argument::Arg> for Training {
             testratio : arg.testratio as i64,
             warmup : arg.warmup,
             wdecay : arg.wdecay,
+            awdecay : arg.awdecay,
             weights,
         }
     }
@@ -96,8 +98,9 @@ impl Training {
     }
 
     fn anealing_learning_rate(&self, ep : usize) -> f64 {
-        let eta = self.eta;
         let period = self.period;
+        let caperiod = ep as i32 / period;
+        let eta = self.eta * (1.0 - self.awdecay).powi(caperiod);
         eta * MIN_COSANEAL +
             eta * 0.5 * (1.0 - MIN_COSANEAL)
                 * (1.0 + (std::f64::consts::PI * (ep as i32 % period) as f64
@@ -334,6 +337,7 @@ impl Training {
             println!("datasize: {datasize}");
             println!("devtype: {}", self.devtype);
             println!("cosine aneaing:{}", self.period);
+            println!("cos aneaing decay:{}", self.awdecay);
             println!("epoch:{}", self.epoch);
             println!("eta:{}", self.eta);
             println!("mini batch: {minibatch}");
