@@ -24,7 +24,7 @@ pub fn findfiles(kifupath : &str) -> Vec<String> {
 }
 
 pub fn loadkifu(files : &[String], d : &str, progress : usize)
-        -> Vec<(bitboard::BitBoard, i8, i8, i8, i8)> {
+        -> Vec<(bitboard::BitBoard, i8, i8, i8)> {
     // let sta = std::time::Instant::now();
     let boards = files.par_iter().flat_map(|fname| {
         let path = format!("{d}/{fname}");
@@ -39,20 +39,20 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize)
             let (fsb, fsw) = ban.fixedstones();
             let score = kifu.score.unwrap();
             Some(vec![
-                (ban.clone(), t.teban, fsb, fsw, score),
+                (ban.clone(), fsb, fsw, score),
                 // オーグメンテーション
-                (ban.rotate90(), t.teban, fsb, fsw, score),
-                (ban.rotate180(), t.teban, fsb, fsw, score),
-                (ban.rotate180().rotate90(), t.teban, fsb, fsw, score),
-                (ban.flip_horz(), t.teban, fsb, fsw, score),
-                (ban.flip_vert(), t.teban, fsb, fsw, score),
+                (ban.rotate90(), fsb, fsw, score),
+                (ban.rotate180(), fsb, fsw, score),
+                (ban.rotate180().rotate90(), fsb, fsw, score),
+                (ban.flip_horz(), fsb, fsw, score),
+                (ban.flip_vert(), fsb, fsw, score),
                 // flip color
-                (ban.flip_all(), -t.teban, fsw, fsb, -score),
-                (ban.rotate90().flip_all(), -t.teban, fsw, fsb, -score),
-                (ban.rotate180().flip_all(), -t.teban, fsw, fsb, -score),
-                (ban.rotate180().rotate90().flip_all(), -t.teban, fsw, fsb, -score),
-                (ban.flip_horz().flip_all(), -t.teban, fsw, fsb, -score),
-                (ban.flip_vert().flip_all(), -t.teban, fsw, fsb, -score)
+                (ban.flip_all(), fsw, fsb, -score),
+                (ban.rotate90().flip_all(), fsw, fsb, -score),
+                (ban.rotate180().flip_all(), fsw, fsb, -score),
+                (ban.rotate180().rotate90().flip_all(), fsw, fsb, -score),
+                (ban.flip_horz().flip_all(), fsw, fsb, -score),
+                (ban.flip_vert().flip_all(), fsw, fsb, -score)
             ])
         }).flatten().collect::<Vec<_>>()
     }).collect();
@@ -61,7 +61,7 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize)
     boards
 }
 
-pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8, i8, i8, i8)>) {
+pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8, i8, i8)>) {
     // println!("board: {} boards", boards.len());
     // let sta = std::time::Instant::now();
     boards.sort_by(|a, b| {
@@ -72,22 +72,22 @@ pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8, i8, i8, i8)>) {
     println!("board: {} boards", boards.len());
 }
 
-pub fn extractboards(boards : &[(bitboard::BitBoard, i8, i8, i8, i8)])
+pub fn extractboards(boards : &[(bitboard::BitBoard, i8, i8, i8)])
         -> Vec<f32> {
-    boards.iter().map(|(b, t, fb, fw, _s)| {
+    boards.iter().map(|(b, fb, fw, _s)| {
         let mut v = [0.0f32 ; INPUTSIZE as usize];
         for x in 0..8 {
             for y in 0..8 {
                 v[x * bitboard::NUMCELL + y] = b.at(x as u8, y as u8) as f32;
             }
         }
-        v[bitboard::CELL_2D] = *t as f32;
+        v[bitboard::CELL_2D] = b.teban as f32;
         v[bitboard::CELL_2D + 1] = *fb as f32;
         v[bitboard::CELL_2D + 2] = *fw as f32;
         v
     }).collect::<Vec<[f32 ; INPUTSIZE as usize]>>().concat()
 }
 
-pub fn extractscore(boards : &[(bitboard::BitBoard, i8, i8, i8, i8)]) -> Vec<f32> {
-    boards.iter().map(|(_b, _t, _fb, _fw, s)| *s as f32).collect::<Vec<f32>>()
+pub fn extractscore(boards : &[(bitboard::BitBoard, i8, i8, i8)]) -> Vec<f32> {
+    boards.iter().map(|(_b, _fb, _fw, s)| *s as f32).collect::<Vec<f32>>()
 }
