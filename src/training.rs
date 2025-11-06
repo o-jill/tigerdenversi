@@ -82,17 +82,23 @@ impl Training {
     /// ex. "-1,false,zero" becomes [true, false, false]
     fn partlist(part : &Option<String>) -> Vec<bool> {
         let mut ret = vec![true ; weight::N_PROGRESS_DIV];
-        if part.is_none() {
-            return ret;
-        }
+        if part.is_none() {return ret;}
 
         let txt = part.as_ref().unwrap();
-        let disable = ["", "0", "false", "no", "none", "off", "zero"];
-        let txt_lo = txt.to_lowercase();
-        for (i, elem) in txt_lo.split(',').enumerate() {
-            if i >= weight::N_PROGRESS_DIV {break;}
+        if txt.is_empty() {return ret;}
 
-            ret[i] = disable.contains(&elem);
+        let disable = [/*"", */"0", "false", "no", "none", "off", "zero"];
+        let txt_lo = txt.to_lowercase();
+        println!("txt_lo:{txt_lo}, txt:[{txt}]");
+        for (i, elem) in txt_lo.split(',').enumerate() {
+            println!("elem:[{elem}]");
+            if i >= weight::N_PROGRESS_DIV {break;}
+            if elem.is_empty() {
+                ret[i] = false;
+                continue;
+            }
+
+            ret[i] = !disable.contains(&elem);
         }
         ret
     }
