@@ -373,3 +373,38 @@ impl Training {
         neuralnet::writeweights(&self.weights);
     }
 }
+
+#[test]
+fn test_partlist() {
+    // csv text to get an array if each part will be trained or not.
+    // "", "0", "false", "no", "none", "off" and "zero" disables training.
+    //
+    // ex. "" becomes [true, true, true]
+    // ex. "1,,0" becomes [true, false, false]
+    // ex. "-1,false,zero" becomes [true, false, false]
+    // fn partlist(part : &Option<String>) -> Vec<bool>
+
+    let s1 = Some(String::new());
+    let p1 = Training::partlist(&s1);
+    assert_eq!(p1, vec![true, true, true]);
+
+    let s2 = Some(String::from("1,,0"));
+    let p2 = Training::partlist(&s2);
+    assert_eq!(p2, vec![true, false, false]);
+
+    let s3 = Some(String::from("-1,false,zero"));
+    let p3 = Training::partlist(&s3);
+    assert_eq!(p3, vec![true, false, false]);
+
+    let s4 = Some(String::from("no,none,off"));
+    let p4 = Training::partlist(&s4);
+    assert_eq!(p4, vec![false, false, false]);
+
+    let s5 = Some(String::from("no,none,a,0"));
+    let p5 = Training::partlist(&s5);
+    assert_eq!(p5, vec![false, false, true]);
+
+    let s6 = Some(String::from("0,"));
+    let p6 = Training::partlist(&s6);
+    assert_eq!(p6, vec![false, false, true]);
+}
