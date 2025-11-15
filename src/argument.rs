@@ -49,4 +49,7 @@ pub struct Arg {
     /// log file path.
     #[arg(long)]
     pub log : Option<String>,
+    /// show ascii graph
+    #[arg(long, default_value_t = false)]
+    pub graph : bool,
 }

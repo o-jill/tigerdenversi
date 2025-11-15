@@ -27,6 +27,8 @@ pub struct Training {
     weights : weight::Weight,
     multibar : MultiProgress,
     log : std::fs::File,
+    loss_curve : Vec<f64>,
+    show_graph : bool,
 }
 
 impl std::fmt::Display for Training {
@@ -255,6 +257,7 @@ impl Training {
                 };
             let elapsed = self.elapsed();
             final_loss = testloss;
+            self.loss_curve.push(testloss);
             self.update(testloss, Some(&pb), wep, elapsed);
         }
         pb.finish_with_message(format!("warm up - done! final loss:{final_loss:.3}"));
@@ -310,6 +313,7 @@ impl Training {
                 };
             let elapsed = self.elapsed();
             final_loss = testloss;
+            self.loss_curve.push(testloss);
             self.update(testloss, Some(&pb), ep + self.warmup, elapsed);
 
             if self.autostop.is_none() {continue;}
@@ -367,6 +371,7 @@ impl Training {
                 loss.double_value(&[])
             };
             let elapsed = self.elapsed();
+            self.loss_curve.push(testloss);
             self.update(testloss, Some(&pb), ep, elapsed);
         }
     }
@@ -460,6 +465,8 @@ impl Training {
 
         neuralnet::writeweights(&self.weights);
 
+        self.plot_loss();
+
         Ok(())
     }
 
@@ -469,6 +476,34 @@ impl Training {
 
     fn putlog(&mut self, msg : &str) {
         self.log.write_all(msg.as_bytes()).unwrap();
+    }
+
+    fn plot_loss(&self) {
+        if !self.show_graph {return;}
+        if self.loss_curve.is_empty() {
+            panic!("self.loss_curve.is_empty()");
+        }
+
+        let w = if self.is_cos_anealing() {
+            self.warmup + self.epoch
+        } else {
+            self.epoch
+        };
+        let data =
+                (0..weight::N_PROGRESS_DIV).map(|i|
+                    self.loss_curve[i * w..(i + 1) * w]
+                        .to_vec()).collect::<Vec<Vec<f64>>>();
+        // println!("{} {} {} {}",
+        //.    data.len(), data[0].len(), data[1].len(), data[2].len());
+        println!("{}",
+            rasciigraph::plot_many(
+                data,
+                rasciigraph::Config::default()
+                    // .with_offset(100)
+                    .with_height(10)
+                    .with_width(40)
+                    .with_caption("loss history".to_string())
+                ));
     }
 }
 
