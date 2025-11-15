@@ -1,8 +1,10 @@
 use super::*;
 
 use std::io::Write;
+use std::time::Duration;
 use tch::nn::{self, OptimizerConfig, VarStore};
 use tch::{Device, data::Iter2, Tensor};
+use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
 const MIN_COSANEAL : f64 = 1e-4;
@@ -23,6 +25,10 @@ pub struct Training {
     wdecay : f64,
     awdecay : f64,
     weights : weight::Weight,
+    multibar : MultiProgress,
+    log : std::fs::File,
+    loss_curve : Vec<f64>,
+    show_graph : bool,
 }
 
 impl std::fmt::Display for Training {
@@ -33,6 +39,20 @@ impl std::fmt::Display for Training {
 
 impl From<argument::Arg> for Training {
     fn from(arg : argument::Arg) -> Self {
+        let path = if let Some(path) = arg.log {
+            path
+        } else {
+            if cfg!(target_os="windows") {
+                String::from("nul")
+            } else {
+                String::from("/dev/null")
+            }
+        };
+        let mut log = match std::fs::File::create(path) {
+        Ok(f) => {f},
+        Err(e) => {panic!("{e}")},
+        };
+
         let partlist = Self::partlist(&arg.part);
         let kifudir = arg.kifudir.unwrap_or("kifu".to_string()).clone();
         let devtype = arg.device.unwrap_or("cpu".to_string());
@@ -47,7 +67,8 @@ impl From<argument::Arg> for Training {
 
         let mut weights = weight::Weight::default();
         if let Some(awei) = arg.weight {
-            println!("load weight from {}", &awei);
+            log.write_all(
+                format!("load weight from {}", &awei).as_bytes()).unwrap();
             if let Err(err) = weights.read(&awei) {
                 panic!("{err}");
             }
@@ -69,11 +90,27 @@ impl From<argument::Arg> for Training {
             wdecay : arg.wdecay,
             awdecay : arg.awdecay,
             weights,
+            multibar : MultiProgress::new(),
+            log,
+            loss_curve :
+                Vec::with_capacity(
+                    weight::N_PROGRESS_DIV * (arg.warmup + arg.epoch)),
+            show_graph : arg.graph,
         }
     }
 }
 
 impl Training {
+    /// returns if cos-anealing mode or not.
+    fn is_cos_anealing(&self) -> bool {
+        self.period > 1
+    }
+
+    /// returns if warm-up mode(false) or not(true).
+    fn is_not_warmup(&self) -> bool {
+        self.warmup < 1
+    }
+
     /// csv text to get an array if each part will be trained or not.
     /// "", "0", "false", "no", "none", "off" and "zero" disables training.
     ///
@@ -135,24 +172,30 @@ impl Training {
             }
     }
 
-    fn prepare_data(&self, progress : usize) -> (tch::Tensor, tch::Tensor) {
+    fn prepare_data(&mut self, progress : usize, pb : &ProgressBar)
+            -> (tch::Tensor, tch::Tensor) {
         // let sta = std::time::Instant::now();
         let mut boards = self.kifudir.split(",").flat_map(
-            |d| data_loader::loadkifu(
-                &data_loader::findfiles(&format!("./{d}")), d, progress)
+            |d| {
+                pb.inc(1);
+                data_loader::loadkifu(
+                    &data_loader::findfiles(&format!("./{d}")),
+                    d, progress, &mut self.log)}
             ).collect();
 
-        data_loader::dedupboards(&mut boards);
+        data_loader::dedupboards(&mut boards, &mut self.log);
         boards.shuffle(&mut rand::thread_rng());
         // println!("{}msec",sta.elapsed().as_millis());
+        pb.inc(1);
 
         let input = tch::Tensor::from_slice(
             &data_loader::extractboards(&boards)).view((boards.len() as i64, INPUTSIZE));
-        println!("input : {} {:?}", input.dim(), input.size());
+        self.putlog(&format!("input : {} {:?}\n", input.dim(), input.size()));
 
         let target = tch::Tensor::from_slice(
             &data_loader::extractscore(&boards)).view((boards.len() as i64, 1));
-        println!("target: {} {:?}", target.dim(), target.size());
+        self.putlog(&format!("target: {} {:?}\n", target.dim(), target.size()));
+        pb.inc(1);
 
         (input, target)
     }
@@ -175,9 +218,16 @@ impl Training {
     fn warmup_sequence(&mut self, nnet : &impl nn::Module,
             vs : &mut VarStore, optm : &mut tch::nn::Optimizer,
             inputs : &[Tensor], targets : &[Tensor], minibatch : i64) {
-        if self.warmup < 1 {return;}
+        if self.is_not_warmup() {return;}
 
+        let pb = self.multibar.add(
+            ProgressBar::new(self.warmup as u64));
+        pb.set_style(
+            ProgressStyle::with_template(
+                "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
+                .progress_chars("🔥🔥🪵"));
         let testratio = inputs.len();
+        let mut final_loss = 0f64;
         for wep in 0..self.warmup {
             let w_eta_min = self.eta * MIN_COSANEAL;
             let a = (self.eta - w_eta_min) / self.warmup as f64;
@@ -206,17 +256,36 @@ impl Training {
                     loss.double_value(&[])
                 };
             let elapsed = self.elapsed();
-            print!("{}", &Self::epochspeed(
-                    wep, self.epoch + self.warmup, testloss, elapsed));
-            std::io::stdout().flush().unwrap();
+            final_loss = testloss;
+            self.loss_curve.push(testloss);
+            self.update(testloss, Some(&pb), wep, elapsed);
         }
+        pb.finish_with_message(format!("warm up - done! final loss:{final_loss:.3}"));
+    }
+
+    fn update(&mut self, loss : f64,
+        pb : Option<&ProgressBar>, ep : usize, elapsed : Duration) {
+        if let Some(pb) = pb {
+            pb.set_message(format!("loss: {loss:.3}"));
+            pb.inc(1);
+        }
+
+        self.log.write_all(Self::epochspeed(
+            ep, self.epoch + self.warmup, loss, elapsed).as_bytes()).unwrap();
     }
 
     fn cos_anealing_sequence(&mut self, nnet : &impl nn::Module,
             vs : &mut VarStore, optm : &mut tch::nn::Optimizer,
             inputs : &[Tensor], targets : &[Tensor], minibatch : i64) {
+        let pb = self.multibar.add(
+            ProgressBar::new(self.epoch as u64));
+        pb.set_style(
+            ProgressStyle::with_template(
+                "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
+            .progress_chars("📗📖📓"));
         let mut sum_loss_prev = 99999999.9;
         let mut sum_loss = 0.0;
+        let mut final_loss = 0f64;
         let testratio = inputs.len();
         for ep in 0..self.epoch {
             let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
@@ -243,17 +312,17 @@ impl Training {
                     loss.double_value(&[])
                 };
             let elapsed = self.elapsed();
-            print!("{}", &Self::epochspeed(
-                    ep + self.warmup, self.epoch + self.warmup,
-                    testloss, elapsed));
-            std::io::stdout().flush().unwrap();
+            final_loss = testloss;
+            self.loss_curve.push(testloss);
+            self.update(testloss, Some(&pb), ep + self.warmup, elapsed);
 
             if self.autostop.is_none() {continue;}
 
             let threshold = self.autostop.unwrap();
             sum_loss += testloss;
             if (ep + 1) % (testratio as i32 * self.period) as usize == 0 {
-                println!("\nsum_loss{}:{sum_loss}", ep + 1);
+                let msg = format!("sum_loss{}:{sum_loss}", ep + 1);
+                self.putlog(&msg);
 
                 if  sum_loss_prev - sum_loss > threshold {
                     sum_loss_prev = sum_loss;
@@ -264,11 +333,18 @@ impl Training {
                 }
             }
         }
+        pb.finish_with_message(format!("cos anealing - done! final loss:{final_loss:.3}"));
     }
 
     fn std_sequence(&mut self, nnet : &impl nn::Module,
             vs : &mut VarStore, optm : &mut tch::nn::Optimizer,
             inputs : &[Tensor], targets : &[Tensor], minibatch : i64) {
+        let pb = self.multibar.add(
+            ProgressBar::new(self.epoch as u64));
+        pb.set_style(
+            ProgressStyle::with_template(
+                "[{elapsed_precise}] {wide_bar} [{eta_precise}] {pos}/{len} {msg}").unwrap()
+            .progress_chars("📗📖📓"));
         let testratio = inputs.len();
         for ep in 0..self.epoch {
             let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
@@ -295,8 +371,8 @@ impl Training {
                 loss.double_value(&[])
             };
             let elapsed = self.elapsed();
-            print!("{}", &Self::epochspeed(ep, self.epoch, testloss, elapsed));
-            std::io::stdout().flush().unwrap();
+            self.loss_curve.push(testloss);
+            self.update(testloss, Some(&pb), ep, elapsed);
         }
     }
 
@@ -309,18 +385,30 @@ impl Training {
     }
 
     pub fn run(&mut self) -> Result<(), tch::TchError> {
+        let pb = self.multibar.add(
+            ProgressBar::new(weight::N_PROGRESS_DIV as u64));
         let trainingpart = self.trainingpart.clone();
         for (progress, en) in trainingpart.iter().enumerate() {
+            pb.inc(1);
             if !*en {
-                println!("progress[{progress}] skipped.");
+                let msg = format!("progress[{progress}] skipped.");
+                println!("{msg}");
+                self.putlog(&msg);
                 continue;
             }
-
-            println!("part[{progress}]");
-
-            let (input, target) = self.prepare_data(progress);
+            let pb = self.multibar.add(
+                ProgressBar::new(
+                    self.kifudir.chars().fold(6,
+                        |acc, c| if c == ',' {acc + 1} else {acc})));
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
+                .progress_chars("🪵🪓🌴"));
+            pb.set_message("loading data...");
+            let (input, target) = self.prepare_data(progress, &pb);
             let inputs = input.chunk(self.testratio, 0);
             let targets = target.chunk(self.testratio, 0);
+            pb.inc(1);
 
             let mut vs = VarStore::new(self.device);
             let nnet = neuralnet::net(&vs.root());
@@ -329,32 +417,36 @@ impl Training {
                 panic!("{err}");
             }
 
+            pb.inc(1);
             let mut optm = nn::AdamW::default().build(&vs, self.eta)?;
             optm.set_weight_decay(self.wdecay);
 
-            for (key, t) in vs.variables().iter_mut() {
-                println!("{key}:{:?}", t.size());
-            }
+            self.putlog(&
+                vs.variables().iter().map(|(key, t)| {
+                    format!("{key}:{:?}\n", t.size())
+                }).collect::<Vec<String>>().join(""));
             let datasize = target.size()[0];
             
             let minibatch = self.adjust_minibatch(datasize);
             
-            println!("auto stop:{:?}", self.autostop);
-            println!("datasize: {datasize}");
-            println!("devtype: {}", self.devtype);
-            println!("cosine aneaing:{}", self.period);
-            println!("cos aneaing decay:{}", self.awdecay);
-            println!("epoch:{}", self.epoch);
-            println!("eta:{}", self.eta);
-            println!("mini batch: {minibatch}");
-            println!("test ratio:{}", self.testratio);
-            println!("training part: {:?}", self.trainingpart);
-            println!("warmup: {}", self.warmup);
-            println!("weight decay:{}", self.wdecay);
+            let msg = format!("auto stop:{:?}\n", self.autostop)
+                + &format!("datasize: {datasize}\n")
+                + &format!("devtype: {}\n", self.devtype)
+                + &format!("cosine aneaing:{}\n", self.period)
+                + &format!("epoch:{}\n", self.epoch)
+                + &format!("eta:{}\n", self.eta)
+                + &format!("mini batch: {minibatch}\n")
+                + &format!("test ratio:{}\n", self.testratio)
+                + &format!("training part: {:?}\n", self.trainingpart)
+                + &format!("warmup: {}\n", self.warmup)
+                + &format!("weight decay:{}\n", self.wdecay);
+            self.putlog(&msg);
+            pb.finish_with_message(
+                format!("preparing {progress} - done!"));
 
             self.start_time();
 
-            if self.period > 1 {  // cos anealing
+            if self.is_cos_anealing() {  // cos anealing
                 self.warmup_sequence(
                     &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
 
@@ -364,19 +456,54 @@ impl Training {
                 self.std_sequence(
                     &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
             }
-            println!();
+            // println!();
 
             // VarStore to weights
             neuralnet::storeweights(&mut self.weights, vs, progress);
         }
+        pb.finish();
 
         neuralnet::writeweights(&self.weights);
+
+        self.plot_loss();
 
         Ok(())
     }
 
     pub fn write(&self) {
         neuralnet::writeweights(&self.weights);
+    }
+
+    fn putlog(&mut self, msg : &str) {
+        self.log.write_all(msg.as_bytes()).unwrap();
+    }
+
+    fn plot_loss(&self) {
+        if !self.show_graph {return;}
+        if self.loss_curve.is_empty() {
+            panic!("self.loss_curve.is_empty()");
+        }
+
+        let w = if self.is_cos_anealing() {
+            self.warmup + self.epoch
+        } else {
+            self.epoch
+        };
+        let data =
+                (0..weight::N_PROGRESS_DIV).map(|i|
+                    self.loss_curve[i * w..(i + 1) * w]
+                        .to_vec()).collect::<Vec<Vec<f64>>>();
+        // println!("{} {} {} {}",
+        //.    data.len(), data[0].len(), data[1].len(), data[2].len());
+        println!("{}",
+            rasciigraph::plot_many(
+                data,
+                rasciigraph::Config::default()
+                    // .with_offset(100)
+                    .with_height(10)
+                    .with_width(40)
+                    .with_caption("loss history".to_string())
+                ));
     }
 }
 

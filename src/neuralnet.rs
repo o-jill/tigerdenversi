@@ -8,7 +8,7 @@ pub fn net(vs : &nn::Path) -> impl Module {
     let relu = true;
     // let relu = false;  // sigmoid
     if relu {
-        println!("activation function: RELU");
+        // println!("activation function: RELU");
         nn::seq()
             .add(
                 nn::linear(vs / "layer1",
@@ -21,7 +21,7 @@ pub fn net(vs : &nn::Path) -> impl Module {
             .add_fn(|xs| xs.relu())
             .add(nn::linear(vs / "layer3", HIDDENSIZE2, 1, Default::default()))
     } else {
-        println!("activation function: Sigmoid");
+        // println!("activation function: Sigmoid");
         nn::seq()
             .add(
                 nn::linear(vs / "layer1",
@@ -112,7 +112,7 @@ pub fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress :
     // let mut params = weight::EvalFile::V8.to_str().to_string() + "\n";
 
     let l1w = weights.get("layer1.weight").unwrap();
-    println!("layer1.weight:{:?}", l1w.size());
+    // println!("layer1.weight:{:?}", l1w.size());
     let numel = l1w.numel();
     l1w.copy_data(tmp.as_mut_slice(), numel);
     for i in 0..HIDDENSIZE as usize {
@@ -132,19 +132,19 @@ pub fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress :
     let mut offset = weight::N_WEIGHT_INPUTBIAS;
     for key in keys {
         let l1w = weights.get(key).unwrap();
-        println!("{key}:{:?}", l1w.size());
+        // println!("{key}:{:?}", l1w.size());
         let numel = l1w.numel();
         l1w.copy_data(tmp.as_mut_slice(), numel);
         outp[offset..offset + numel].copy_from_slice(&tmp[0..numel]);
         offset += numel;
     }
     let l3b = weights.get("layer3.bias").unwrap();
-    println!("layer3.bias:{:?}", l3b.size());
+    // println!("layer3.bias:{:?}", l3b.size());
     let numel = l3b.numel();
     l1w.copy_data(tmp.as_mut_slice(), numel);
     *outp.last_mut().unwrap() = tmp[0];
 
-    println!("save to weight [{progress}]");
+    println!("store to weight [{progress}]");
     weights_dst.copy_from_slice(&outp, progress);
 }
 
