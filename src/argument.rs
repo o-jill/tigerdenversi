@@ -46,4 +46,7 @@ pub struct Arg {
     /// weight decay for every cos-anealing period
     #[arg(long, default_value_t = 0.001)]
     pub awdecay : f64,
+    /// log file path.
+    #[arg(long)]
+    pub log : Option<String>,
 }

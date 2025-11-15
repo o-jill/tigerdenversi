@@ -23,12 +23,17 @@ pub fn findfiles(kifupath : &str) -> Vec<String> {
     files
 }
 
-pub fn loadkifu(files : &[String], d : &str, progress : usize)
+pub fn loadkifu(files : &[String], d : &str, progress : usize,
+        log : &mut std::fs::File)
         -> Vec<(bitboard::BitBoard, i8, i8, i8)> {
     // let sta = std::time::Instant::now();
+    let shared = std::sync::Mutex::new(log);
     let boards = files.par_iter().flat_map(|fname| {
         let path = format!("{d}/{fname}");
-        print!("{path}\r");
+        {
+            let mut l = shared.lock().unwrap();
+            l.write_all(format!("{path}\n").as_bytes()).unwrap();
+        }
         let content = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();
         let kifu = kifu::Kifu::from(&lines);
@@ -56,12 +61,13 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize)
             ])
         }).flatten().collect::<Vec<_>>()
     }).collect();
-    println!();
+    // println!();
     // println!("{}usec",sta.elapsed().as_micros());
     boards
 }
 
-pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8, i8, i8)>) {
+pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8, i8, i8)>,
+                   log : &mut std::fs::File) {
     // println!("board: {} boards", boards.len());
     // let sta = std::time::Instant::now();
     boards.sort_by(|a, b| {
@@ -69,7 +75,8 @@ pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8, i8, i8)>) {
     });
     boards.dedup_by(|a, b| {a == b});
     // println!("{}usec",sta.elapsed().as_micros());
-    println!("board: {} boards", boards.len());
+    log.write_all(
+        format!("board: {} boards\n", boards.len()).as_bytes()).unwrap();
 }
 
 pub fn extractboards(boards : &[(bitboard::BitBoard, i8, i8, i8)])
