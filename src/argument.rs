@@ -21,6 +21,9 @@ pub struct Arg {
     /// storing weight after some iterations as weight.EPOCH.txt.
     #[arg(short, long)]
     pub progress : Option<String>,
+    /// show progressbar
+    #[arg(long, default_value_t = false)]
+    pub progressbar : bool,
     /// cosine anealing period.
     #[arg(short, long, default_value_t = 0)]
     pub anealing : i32,
