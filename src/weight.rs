@@ -3,7 +3,7 @@ use rand::Rng;
 use std::{fs, io::{BufReader, BufRead}};
 
 /*
- * input: NUMCELL * NUMCELL + 1(teban) + 2(fixedstones) + 1
+ * input: NUMCELL * NUMCELL * 2 + 1(teban) + 2(fixedstones) + 1
  * hidden: 8 + 1
  * output: 1
  */
@@ -11,7 +11,7 @@ pub const N_INPUT : usize = bitboard::CELL_2D * 2 + 1 + 2;
 pub const N_HIDDEN : usize = 128;
 pub const N_HIDDEN2 : usize = 16;
 const N_OUTPUT : usize = 1;
-pub const N_WEIGHT_TEBAN : usize =  bitboard::CELL_2D * N_HIDDEN;
+pub const N_WEIGHT_TEBAN : usize =  bitboard::CELL_2D * 2 * N_HIDDEN;
 pub const N_WEIGHT_FIXST_B : usize = N_WEIGHT_TEBAN + N_HIDDEN;
 pub const N_WEIGHT_FIXST_W : usize = N_WEIGHT_FIXST_B + N_HIDDEN;
 pub const N_WEIGHT_INPUTBIAS : usize = N_WEIGHT_FIXST_W + N_HIDDEN;
@@ -45,6 +45,8 @@ const WSZV7 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * 32
 const WSZV8 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * N_HIDDEN
         + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
 const WSZV9 : usize = WSZV8;
+const WSZV10 : usize = (bitboard::CELL_2D * 2 + 1 + 2 + 1) * N_HIDDEN
+        + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
 
 // v2
 // 8/8/1A6/2Ab3/2C3/8/8/8 w
@@ -244,6 +246,11 @@ impl Weight {
                             idx += 1;
                             if idx >= N_PROGRESS_DIV {return Ok(());}
                         },
+                        EvalFile::V10 => {
+                            self.readv10(&l, idx)?;
+                            idx += 1;
+                            if idx >= N_PROGRESS_DIV {return Ok(());}
+                        },
                         _ => {}
                     }
                 },
@@ -306,10 +313,23 @@ impl Weight {
             return Err(String::from("size mismatch"));
         }
         self.copy_from_slice(&newtable, progress);
-        // println!("v8:{:?}", self.weight);
+        // println!("v10:{:?}", self.weight);
         Ok(())
     }
 
+    fn readv10(&mut self, line : &str, progress : usize) -> Result<(), String> {
+        let csv = line.split(",").collect::<Vec<_>>();
+        let newtable : Vec<f32> = csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
+        let nsz = newtable.len();
+        if WSZV10 != nsz {
+            return Err(String::from("size mismatch"));
+        }
+        self.copy_from_slice(&newtable, progress);
+        // println!("v10:{:?}", self.weight);
+        Ok(())
+    }
+
+    #[allow(dead_code)]
     pub fn writev9(&self, path : &str) ->Result<(), std::io::Error> {
         // header
         let mut outp = format!("{}\n", EvalFile::V9.to_str());
