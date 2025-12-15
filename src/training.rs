@@ -128,9 +128,9 @@ impl Training {
 
         let disable = [/*"", */"0", "false", "no", "none", "off", "zero"];
         let txt_lo = txt.to_lowercase();
-        println!("txt_lo:{txt_lo}, txt:[{txt}]");
+        // println!("txt_lo:{txt_lo}, txt:[{txt}]");
         for (i, elem) in txt_lo.split(',').enumerate() {
-            println!("elem:[{elem}]");
+            // println!("elem:[{elem}]");
             if i >= weight::N_PROGRESS_DIV {break;}
             if elem.is_empty() {
                 ret[i] = false;
@@ -419,7 +419,7 @@ impl Training {
             if !*en {
                 let msg = format!("progress[{progress}] skipped.");
                 println!("{msg}");
-                self.putlog(&msg);
+                self.putlog(&(msg + "\n"));
                 continue;
             }
             let pbchild = if self.show_progressbar {

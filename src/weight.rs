@@ -7,7 +7,7 @@ use std::{fs, io::{BufReader, BufRead}};
  * hidden: 8 + 1
  * output: 1
  */
-pub const N_INPUT : usize = bitboard::CELL_2D + 1 + 2;
+pub const N_INPUT : usize = bitboard::CELL_2D * 2 + 1 + 2;
 pub const N_HIDDEN : usize = 128;
 pub const N_HIDDEN2 : usize = 16;
 const N_OUTPUT : usize = 1;
@@ -64,6 +64,7 @@ pub enum EvalFile{
     V7,
     V8,
     V9,
+    V10,
 }
 
 impl EvalFile {
@@ -79,6 +80,7 @@ impl EvalFile {
             EvalFile::V7 => {"# 64+1+2-32-16-1"},
             EvalFile::V8 => {"# 64+1+2-128-16-1"},
             EvalFile::V9 => {"# 3x 64+1+2-128-16-1"},
+            EvalFile::V10 => {"# 3x 128+1+2-128-16-1"},
         }
     }
 
@@ -93,13 +95,14 @@ impl EvalFile {
             "# 64+1+2-32-16-1" => Some(EvalFile::V7),
             "# 64+1+2-128-16-1" => Some(EvalFile::V8),
             "# 3x 64+1+2-128-16-1" => Some(EvalFile::V9),
+            "# 3x 128+1+2-128-16-1" => Some(EvalFile::V10),
             _ => None
         }
     }
 
     #[allow(dead_code)]
     pub fn latest_header() -> String {
-        format!("# x{N_PROGRESS_DIV} 64+1+2-{N_HIDDEN}-{N_HIDDEN2}-1")
+        format!("# x{N_PROGRESS_DIV} 128+1+2-{N_HIDDEN}-{N_HIDDEN2}-1")
     }
 }
 
@@ -310,6 +313,26 @@ impl Weight {
     pub fn writev9(&self, path : &str) ->Result<(), std::io::Error> {
         // header
         let mut outp = format!("{}\n", EvalFile::V9.to_str());
+
+        // weights
+        for prgs in 0..N_PROGRESS_DIV {
+            let offset = prgs * N_WEIGHT_PAD;
+            let w = &self.weight[offset..offset + N_WEIGHT];
+            let sv = w.iter().map(|a| a.to_string()).collect::<Vec<String>>();
+            outp += &sv.join(",");
+            outp += "\n";
+        }
+
+        // put to a file
+        let mut f = fs::File::create(path).unwrap();
+        f.write_all(outp.as_bytes())?;
+
+        Ok(())
+    }
+
+    pub fn write_latest(&self, path : &str) ->Result<(), std::io::Error> {
+        // header
+        let mut outp = format!("{}\n", EvalFile::latest_header());
 
         // weights
         for prgs in 0..N_PROGRESS_DIV {

@@ -47,7 +47,7 @@ pub fn loadtensor(vs : &mut VarStore, key : &str, src : &Tensor) {
 // .safetensor and ruversi weight format are available.
 pub fn load(vs : &mut VarStore, weights_org : &weight::Weight, progress : usize)
         -> Result<(), String> {
-    const INPSIZE : usize = bitboard::CELL_2D + 1 + 2;
+    const INPSIZE : usize = INPUTSIZE as usize;
     const HIDSIZE : usize = HIDDENSIZE as usize;
     let wban = weights_org.wban(progress);
     let wtbn = weights_org.wteban(progress);
@@ -150,7 +150,7 @@ pub fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress :
 
 pub fn writeweights(weights : &weight::Weight) {
     println!("save to weights.txt");
-    if let Err(err) = weights.writev9("weights.txt") {
+    if let Err(err) = weights.write_latest("weights.txt") {
         panic!("{err}");
     }
 }
