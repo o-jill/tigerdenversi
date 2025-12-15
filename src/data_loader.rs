@@ -91,9 +91,9 @@ pub fn extractboards(boards : &[(bitboard::BitBoard, i8, i8, i8)])
                 v[x * bitboard::NUMCELL + y + bitboard::CELL_2D] = b.white_at(x, y);
             }
         }
-        v[bitboard::CELL_2D] = b.teban as f32;
-        v[bitboard::CELL_2D + 1] = *fb as f32;
-        v[bitboard::CELL_2D + 2] = *fw as f32;
+        v[bitboard::CELL_2D * 2] = b.teban as f32;
+        v[bitboard::CELL_2D * 2 + 1] = *fb as f32;
+        v[bitboard::CELL_2D * 2 + 2] = *fw as f32;
         v
     }).collect::<Vec<[f32 ; INPUTSIZE as usize]>>().concat()
 }
