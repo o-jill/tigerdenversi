@@ -116,15 +116,14 @@ pub fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress :
     let numel = l1w.numel();
     l1w.copy_data(tmp.as_mut_slice(), numel);
     for i in 0..HIDDENSIZE as usize {
-        let offset_out = i * bitboard::CELL_2D;
+        let wsz = bitboard::CELL_2D * 2;
+        let offset_out = i * wsz;
         let offset = i * INPUTSIZE as usize;
-        outp[offset_out..offset_out + bitboard::CELL_2D].copy_from_slice(
-            &tmp[offset..offset + bitboard::CELL_2D]);
-        outp[weight::N_WEIGHT_TEBAN + i] = tmp[bitboard::CELL_2D + offset];
-        outp[weight::N_WEIGHT_FIXST_B + i] =
-            tmp[bitboard::CELL_2D + 1 + offset];
-        outp[weight::N_WEIGHT_FIXST_W + i] =
-            tmp[bitboard::CELL_2D + 2 + offset];
+        outp[offset_out..offset_out + wsz].copy_from_slice(
+            &tmp[offset..offset + wsz]);
+        outp[weight::N_WEIGHT_TEBAN + i] = tmp[wsz + offset];
+        outp[weight::N_WEIGHT_FIXST_B + i] = tmp[wsz + 1 + offset];
+        outp[weight::N_WEIGHT_FIXST_W + i] = tmp[wsz + 2 + offset];
     }
     let keys = [
         "layer1.bias", "layer2.weight", "layer2.bias", "layer3.weight"
