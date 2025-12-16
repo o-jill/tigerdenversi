@@ -101,3 +101,62 @@ pub fn extractboards(boards : &[(bitboard::BitBoard, i8, i8, i8)])
 pub fn extractscore(boards : &[(bitboard::BitBoard, i8, i8, i8)]) -> Vec<f32> {
     boards.iter().map(|(_b, _fb, _fw, s)| *s as f32).collect::<Vec<f32>>()
 }
+
+#[test]
+fn test_extract_boards() {
+    let input = [
+        ("8/8/8/3Aa3/3aA3/8/8/8 b", 10i8), ("h/h/h/h/H/H/H/H w", 3i8)
+    ].iter().map(|(rfen, result)| {
+        let ban = bitboard::BitBoard::from(rfen).unwrap();
+        let  (fb, fw) = ban.fixedstones();
+        (ban, fb, fw, *result)
+    }).collect::<Vec<(bitboard::BitBoard, i8, i8, i8)>>();
+    let convert = extractboards(&input);
+    let answer = vec![
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,1f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,1f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,1f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,1f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+
+        1f32, 0f32, 0f32,
+
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        1f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
+        1f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
+        1f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
+        1f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
+
+        1f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
+        1f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
+        1f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
+        1f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+
+        -1f32, 32f32, 32f32,
+    ];
+
+    assert_eq!(convert, answer);
+
+    let scores = extractscore(&input);
+    let answer = vec![10f32, 3f32];
+    assert_eq!(scores, answer);
+}
