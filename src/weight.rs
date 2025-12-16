@@ -104,7 +104,7 @@ impl EvalFile {
 
     #[allow(dead_code)]
     pub fn latest_header() -> String {
-        format!("# x{N_PROGRESS_DIV} 128+1+2-{N_HIDDEN}-{N_HIDDEN2}-1")
+        format!("# {N_PROGRESS_DIV}x 128+1+2-{N_HIDDEN}-{N_HIDDEN2}-1")
     }
 }
 
