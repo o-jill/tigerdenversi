@@ -105,7 +105,8 @@ pub fn extractscore(boards : &[(bitboard::BitBoard, i8, i8, i8)]) -> Vec<f32> {
 #[test]
 fn test_extract_boards() {
     let input = [
-        ("8/8/8/3Aa3/3aA3/8/8/8 b", 10i8), ("h/h/h/h/H/H/H/H w", 3i8)
+        ("8/8/8/3Aa3/3aA3/8/8/8 b", 10i8), ("h/h/h/h/H/H/H/H w", 3i8),
+        ("Ag/Ga/Bf/Fb/Ce/Ec/Dd/dD b",-2i8)
     ].iter().map(|(rfen, result)| {
         let ban = bitboard::BitBoard::from(rfen).unwrap();
         let  (fb, fw) = ban.fixedstones();
@@ -113,6 +114,7 @@ fn test_extract_boards() {
     }).collect::<Vec<(bitboard::BitBoard, i8, i8, i8)>>();
     let convert = extractboards(&input);
     let answer = vec![
+        // 8/8/8/3Aa3/3aA3/8/8/8 b"
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
@@ -121,7 +123,6 @@ fn test_extract_boards() {
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
-
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
@@ -130,9 +131,8 @@ fn test_extract_boards() {
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
-
         1f32, 0f32, 0f32,
-
+        // "h/h/h/h/H/H/H/H w"
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
@@ -141,7 +141,6 @@ fn test_extract_boards() {
         1f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
         1f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
         1f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
-
         1f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
         1f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
         1f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
@@ -150,13 +149,30 @@ fn test_extract_boards() {
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
-
         -1f32, 32f32, 32f32,
+        // "Ag/Ga/Bf/Fb/Ce/Ec/Dd/dD b"
+        1f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        1f32,1f32,1f32,1f32,1f32,1f32,1f32,0f32,
+        1f32,1f32,0f32,0f32,0f32,0f32,0f32,0f32,
+        1f32,1f32,1f32,1f32,1f32,1f32,0f32,0f32,
+        1f32,1f32,1f32,0f32,0f32,0f32,0f32,0f32,
+        1f32,1f32,1f32,1f32,1f32,0f32,0f32,0f32,
+        1f32,1f32,1f32,1f32,0f32,0f32,0f32,0f32,
+        0f32,0f32,0f32,0f32,1f32,1f32,1f32,1f32,
+        0f32,1f32,1f32,1f32,1f32,1f32,1f32,1f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,0f32,1f32,
+        0f32,0f32,1f32,1f32,1f32,1f32,1f32,1f32,
+        0f32,0f32,0f32,0f32,0f32,0f32,1f32,1f32,
+        0f32,0f32,0f32,1f32,1f32,1f32,1f32,1f32,
+        0f32,0f32,0f32,0f32,0f32,1f32,1f32,1f32,
+        0f32,0f32,0f32,0f32,1f32,1f32,1f32,1f32,
+        1f32,1f32,1f32,1f32,0f32,0f32,0f32,0f32,
+        1f32, 11f32,17f32,
     ];
 
     assert_eq!(convert, answer);
 
     let scores = extractscore(&input);
-    let answer = vec![10f32, 3f32];
+    let answer = vec![10f32, 3f32, -2f32];
     assert_eq!(scores, answer);
 }
