@@ -87,8 +87,8 @@ pub fn extractboards(boards : &[(bitboard::BitBoard, i8, i8, i8)])
         let mut v = [0.0f32 ; INPUTSIZE as usize];
         for x in 0..8 {
             for y in 0..8 {
-                v[x * bitboard::NUMCELL + y] = b.black_at(x, y);
-                v[x * bitboard::NUMCELL + y + bitboard::CELL_2D] = b.white_at(x, y);
+                v[x + bitboard::NUMCELL * y] = b.black_at(x, y);
+                v[x + bitboard::NUMCELL * y + bitboard::CELL_2D] = b.white_at(x, y);
             }
         }
         v[bitboard::CELL_2D * 2] = b.teban as f32;
