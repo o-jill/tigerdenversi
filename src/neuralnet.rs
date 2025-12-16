@@ -61,11 +61,12 @@ pub fn load(vs : &mut VarStore, weights_org : &weight::Weight, progress : usize)
     // layer1.weight
     let mut weights = [0.0f32 ; INPSIZE * HIDSIZE];
     for i in 0..HIDDENSIZE as usize {
-        weights[i * INPSIZE..i * INPSIZE + bitboard::CELL_2D].copy_from_slice(
-            &wban[i * bitboard::CELL_2D .. (i + 1) * bitboard::CELL_2D]);
-        weights[i * INPSIZE + bitboard::CELL_2D] = wtbn[i];
-        weights[i * INPSIZE + bitboard::CELL_2D + 1] = wfs[i];
-        weights[i * INPSIZE + bitboard::CELL_2D + 2] = wfs[i + HIDSIZE];
+        let wsz = bitboard::CELL_2D * 2;
+        weights[i * INPSIZE..i * INPSIZE + wsz].copy_from_slice(
+            &wban[i * wsz .. (i + 1) * wsz]);
+        weights[i * INPSIZE + wsz] = wtbn[i];
+        weights[i * INPSIZE + wsz + 1] = wfs[i];
+        weights[i * INPSIZE + wsz + 2] = wfs[i + HIDSIZE];
     }
     let wl1 = Tensor::from_slice(&weights).view((HIDDENSIZE, INPUTSIZE));
     neuralnet::loadtensor(vs, "layer1.weight", &wl1);
@@ -116,7 +117,7 @@ pub fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress :
     let numel = l1w.numel();
     l1w.copy_data(tmp.as_mut_slice(), numel);
     for i in 0..HIDDENSIZE as usize {
-        let wsz = bitboard::CELL_2D * 2;
+        let wsz = bitboard::CELL_2D * 2;  // 先後の石の升分
         let offset_out = i * wsz;
         let offset = i * INPUTSIZE as usize;
         outp[offset_out..offset_out + wsz].copy_from_slice(
