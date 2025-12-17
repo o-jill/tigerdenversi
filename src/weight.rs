@@ -112,7 +112,7 @@ impl EvalFile {
 
 #[repr(align(32))]
 pub struct Weight {
-    pub weight : [f32 ; N_WEIGHT_PAD * N_PROGRESS_DIV],
+    pub weight : Vec<f32>,
 }
 
 impl Default for Weight {
@@ -126,7 +126,13 @@ impl Default for Weight {
 impl Weight {
     pub fn new() -> Weight {
         Weight {
-            weight: [0.0 ; N_WEIGHT_PAD * N_PROGRESS_DIV]
+            weight: {
+                let sz = N_WEIGHT_PAD * N_PROGRESS_DIV;
+                let mut v = Vec::with_capacity(sz);
+                unsafe {v.set_len(sz);}
+                v.fill(0f32);
+                v
+            }
         }
     }
 
