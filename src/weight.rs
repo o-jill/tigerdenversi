@@ -132,11 +132,14 @@ impl Weight {
         Weight {
             weight: {
                 let mut v : Vec<Vec<f32>> = Vec::with_capacity(N_PROGRESS_DIV);
-                unsafe {v.set_len(N_PROGRESS_DIV);}
-                for e in v.iter_mut() {
-                    e.reserve(N_WEIGHT);
-                    unsafe {e.set_len(N_WEIGHT);}
-                    e.fill(0f32);
+                for ve in v.spare_capacity_mut() {
+                    ve.write({
+                        let mut v = Vec::with_capacity(N_WEIGHT);
+                        let e = v.spare_capacity_mut();
+                        e.fill(std::mem::MaybeUninit::zeroed());
+                        unsafe {v.set_len(N_WEIGHT);}
+                        v
+                    });
                 }
                 v
             }
