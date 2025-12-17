@@ -126,18 +126,21 @@ pub fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress :
         outp[weight::N_WEIGHT_FIXED_B + i] = tmp[wsz + 1 + offset];
         outp[weight::N_WEIGHT_FIXED_W + i] = tmp[wsz + 2 + offset];
     }
+
     let keys = [
-        "layer1.bias", "layer2.weight", "layer2.bias", "layer3.weight"
+        ("layer1.bias", weight::N_WEIGHT_INPUTBIAS),
+        ("layer2.weight", weight::N_WEIGHT_LAYER1),
+        ("layer2.bias", weight::N_WEIGHT_LAYER1BIAS),
+        ("layer3.weight", weight::N_WEIGHT_LAYER2),
     ];
-    let mut offset = weight::N_WEIGHT_INPUTBIAS;
-    for key in keys {
+    for (key, offset) in keys {
         let l1w = weights.get(key).unwrap();
         // println!("{key}:{:?}", l1w.size());
         let numel = l1w.numel();
         l1w.copy_data(tmp.as_mut_slice(), numel);
         outp[offset..offset + numel].copy_from_slice(&tmp[0..numel]);
-        offset += numel;
     }
+
     let l3b = weights.get("layer3.bias").unwrap();
     // println!("layer3.bias:{:?}", l3b.size());
     let numel = l3b.numel();
