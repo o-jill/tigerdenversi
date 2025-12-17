@@ -85,15 +85,15 @@ pub fn extractboards(boards : &[(bitboard::BitBoard, i8, i8, i8)])
         -> Vec<f32> {
     boards.iter().map(|(b, fb, fw, _s)| {
         let mut v = [0.0f32 ; INPUTSIZE as usize];
-        for x in 0..8 {
-            for y in 0..8 {
-                v[x + bitboard::NUMCELL * y] = b.black_at(x, y);
-                v[x + bitboard::NUMCELL * y + bitboard::CELL_2D] = b.white_at(x, y);
+        for y in 0..8 {
+            for x in 0..8 {
+                v[x + bitboard::NUMCELL * y + weight::N_INPUT_BLACK] = b.black_at(x, y);
+                v[x + bitboard::NUMCELL * y + weight::N_INPUT_WHITE] = b.white_at(x, y);
             }
         }
-        v[bitboard::CELL_2D * 2] = b.teban as f32;
-        v[bitboard::CELL_2D * 2 + 1] = *fb as f32;
-        v[bitboard::CELL_2D * 2 + 2] = *fw as f32;
+        v[weight::N_INPUT_TEBAN] = b.teban as f32;
+        v[weight::N_INPUT_FB] = *fb as f32;
+        v[weight::N_INPUT_FW] = *fw as f32;
         v
     }).collect::<Vec<[f32 ; INPUTSIZE as usize]>>().concat()
 }

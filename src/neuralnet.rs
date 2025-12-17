@@ -123,8 +123,8 @@ pub fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress :
         outp[offset_out..offset_out + wsz].copy_from_slice(
             &tmp[offset..offset + wsz]);
         outp[weight::N_WEIGHT_TEBAN + i] = tmp[wsz + offset];
-        outp[weight::N_WEIGHT_FIXST_B + i] = tmp[wsz + 1 + offset];
-        outp[weight::N_WEIGHT_FIXST_W + i] = tmp[wsz + 2 + offset];
+        outp[weight::N_WEIGHT_FIXED_B + i] = tmp[wsz + 1 + offset];
+        outp[weight::N_WEIGHT_FIXED_W + i] = tmp[wsz + 2 + offset];
     }
     let keys = [
         "layer1.bias", "layer2.weight", "layer2.bias", "layer3.weight"

@@ -7,14 +7,19 @@ use std::{fs, io::{BufReader, BufRead}};
  * hidden: 8 + 1
  * output: 1
  */
-pub const N_INPUT : usize = bitboard::CELL_2D * 2 + 1 + 2;
+pub const N_INPUT_BLACK : usize = 0;
+pub const N_INPUT_WHITE : usize = N_INPUT_BLACK + bitboard::CELL_2D;
+pub const N_INPUT_TEBAN : usize = N_INPUT_WHITE + bitboard::CELL_2D;
+pub const N_INPUT_FB : usize = N_INPUT_TEBAN + 1;
+pub const N_INPUT_FW : usize = N_INPUT_FB + 1;
+pub const N_INPUT : usize = N_INPUT_FW + 1;
 pub const N_HIDDEN : usize = 128;
 pub const N_HIDDEN2 : usize = 16;
 const N_OUTPUT : usize = 1;
-pub const N_WEIGHT_TEBAN : usize =  bitboard::CELL_2D * 2 * N_HIDDEN;
-pub const N_WEIGHT_FIXST_B : usize = N_WEIGHT_TEBAN + N_HIDDEN;
-pub const N_WEIGHT_FIXST_W : usize = N_WEIGHT_FIXST_B + N_HIDDEN;
-pub const N_WEIGHT_INPUTBIAS : usize = N_WEIGHT_FIXST_W + N_HIDDEN;
+pub const N_WEIGHT_TEBAN : usize = N_INPUT_TEBAN * 2 * N_HIDDEN;
+pub const N_WEIGHT_FIXED_B : usize = N_WEIGHT_TEBAN + N_HIDDEN;
+pub const N_WEIGHT_FIXED_W : usize = N_WEIGHT_FIXED_B + N_HIDDEN;
+pub const N_WEIGHT_INPUTBIAS : usize = N_WEIGHT_FIXED_W + N_HIDDEN;
 pub const N_WEIGHT_LAYER1 : usize = N_WEIGHT_INPUTBIAS + N_HIDDEN;
 pub const N_WEIGHT_LAYER1BIAS : usize = N_WEIGHT_LAYER1 + N_HIDDEN * N_HIDDEN2;
 pub const N_WEIGHT_LAYER2 : usize = N_WEIGHT_LAYER1BIAS + N_HIDDEN2;
@@ -165,24 +170,24 @@ impl Weight {
 
     pub fn wteban(&self, progress : usize) -> &[f32] {
         let offset = progress * N_WEIGHT_PAD;
-        &self.weight[offset + N_WEIGHT_TEBAN..offset + N_WEIGHT_FIXST_W]
+        &self.weight[offset + N_WEIGHT_TEBAN..offset + N_WEIGHT_FIXED_W]
     }
 
     pub fn wfixedstones(&self, progress : usize) -> &[f32] {
         let offset = progress * N_WEIGHT_PAD;
-        &self.weight[offset + N_WEIGHT_FIXST_B..offset + N_WEIGHT_INPUTBIAS]
+        &self.weight[offset + N_WEIGHT_FIXED_B..offset + N_WEIGHT_INPUTBIAS]
     }
 
     #[allow(dead_code)]
     pub fn wfixedstone_b(&self, progress : usize) -> &[f32] {
         let offset = progress * N_WEIGHT_PAD;
-        &self.weight[offset + N_WEIGHT_FIXST_B..offset + N_WEIGHT_FIXST_W]
+        &self.weight[offset + N_WEIGHT_FIXED_B..offset + N_WEIGHT_FIXED_W]
     }
 
     #[allow(dead_code)]
     pub fn wfixedstone_w(&self, progress : usize) -> &[f32] {
         let offset = progress * N_WEIGHT_PAD;
-        &self.weight[offset + N_WEIGHT_FIXST_W..offset + N_WEIGHT_INPUTBIAS]
+        &self.weight[offset + N_WEIGHT_FIXED_W..offset + N_WEIGHT_INPUTBIAS]
     }
 
     pub fn wibias(&self, progress : usize) -> &[f32] {
