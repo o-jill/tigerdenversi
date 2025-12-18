@@ -303,6 +303,16 @@ impl BitBoard {
     }
 
     #[allow(dead_code)]
+    pub fn black_at(&self, x: usize, y: usize) -> f32 {
+        ((self.black >> BitBoard::index(x, y)) & LSB_CELL) as f32
+    }
+
+    #[allow(dead_code)]
+    pub fn white_at(&self, x: usize, y: usize) -> f32 {
+        ((self.white >> BitBoard::index(x, y)) & LSB_CELL) as f32
+    }
+
+    #[allow(dead_code)]
     pub fn isfilled(&self, x: u8, y: u8) -> bool {
         let bit : u64 = LSB_CELL << BitBoard::index(x as usize, y as usize);
         (bit & (self.black | self.white)) != 0

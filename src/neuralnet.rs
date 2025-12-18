@@ -47,7 +47,7 @@ pub fn loadtensor(vs : &mut VarStore, key : &str, src : &Tensor) {
 // .safetensor and ruversi weight format are available.
 pub fn load(vs : &mut VarStore, weights_org : &weight::Weight, progress : usize)
         -> Result<(), String> {
-    const INPSIZE : usize = bitboard::CELL_2D + 1 + 2;
+    const INPSIZE : usize = INPUTSIZE as usize;
     const HIDSIZE : usize = HIDDENSIZE as usize;
     let wban = weights_org.wban(progress);
     let wtbn = weights_org.wteban(progress);
@@ -61,11 +61,12 @@ pub fn load(vs : &mut VarStore, weights_org : &weight::Weight, progress : usize)
     // layer1.weight
     let mut weights = [0.0f32 ; INPSIZE * HIDSIZE];
     for i in 0..HIDDENSIZE as usize {
-        weights[i * INPSIZE..i * INPSIZE + bitboard::CELL_2D].copy_from_slice(
-            &wban[i * bitboard::CELL_2D .. (i + 1) * bitboard::CELL_2D]);
-        weights[i * INPSIZE + bitboard::CELL_2D] = wtbn[i];
-        weights[i * INPSIZE + bitboard::CELL_2D + 1] = wfs[i];
-        weights[i * INPSIZE + bitboard::CELL_2D + 2] = wfs[i + HIDSIZE];
+        let wsz = bitboard::CELL_2D * 2;
+        weights[i * INPSIZE..i * INPSIZE + wsz].copy_from_slice(
+            &wban[i * wsz .. (i + 1) * wsz]);
+        weights[i * INPSIZE + wsz] = wtbn[i];
+        weights[i * INPSIZE + wsz + 1] = wfs[i];
+        weights[i * INPSIZE + wsz + 2] = wfs[i + HIDSIZE];
     }
     let wl1 = Tensor::from_slice(&weights).view((HIDDENSIZE, INPUTSIZE));
     neuralnet::loadtensor(vs, "layer1.weight", &wl1);
@@ -116,28 +117,30 @@ pub fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress :
     let numel = l1w.numel();
     l1w.copy_data(tmp.as_mut_slice(), numel);
     for i in 0..HIDDENSIZE as usize {
-        let offset_out = i * bitboard::CELL_2D;
+        let wsz = bitboard::CELL_2D * 2;  // 先後の石の升分
+        let offset_out = i * wsz;
         let offset = i * INPUTSIZE as usize;
-        outp[offset_out..offset_out + bitboard::CELL_2D].copy_from_slice(
-            &tmp[offset..offset + bitboard::CELL_2D]);
-        outp[weight::N_WEIGHT_TEBAN + i] = tmp[bitboard::CELL_2D + offset];
-        outp[weight::N_WEIGHT_FIXST_B + i] =
-            tmp[bitboard::CELL_2D + 1 + offset];
-        outp[weight::N_WEIGHT_FIXST_W + i] =
-            tmp[bitboard::CELL_2D + 2 + offset];
+        outp[offset_out..offset_out + wsz].copy_from_slice(
+            &tmp[offset..offset + wsz]);
+        outp[weight::N_WEIGHT_TEBAN + i] = tmp[wsz + offset];
+        outp[weight::N_WEIGHT_FIXED_B + i] = tmp[wsz + 1 + offset];
+        outp[weight::N_WEIGHT_FIXED_W + i] = tmp[wsz + 2 + offset];
     }
+
     let keys = [
-        "layer1.bias", "layer2.weight", "layer2.bias", "layer3.weight"
+        ("layer1.bias", weight::N_WEIGHT_INPUTBIAS),
+        ("layer2.weight", weight::N_WEIGHT_LAYER1),
+        ("layer2.bias", weight::N_WEIGHT_LAYER1BIAS),
+        ("layer3.weight", weight::N_WEIGHT_LAYER2),
     ];
-    let mut offset = weight::N_WEIGHT_INPUTBIAS;
-    for key in keys {
+    for (key, offset) in keys {
         let l1w = weights.get(key).unwrap();
         // println!("{key}:{:?}", l1w.size());
         let numel = l1w.numel();
         l1w.copy_data(tmp.as_mut_slice(), numel);
         outp[offset..offset + numel].copy_from_slice(&tmp[0..numel]);
-        offset += numel;
     }
+
     let l3b = weights.get("layer3.bias").unwrap();
     // println!("layer3.bias:{:?}", l3b.size());
     let numel = l3b.numel();
@@ -150,7 +153,7 @@ pub fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress :
 
 pub fn writeweights(weights : &weight::Weight) {
     println!("save to weights.txt");
-    if let Err(err) = weights.writev9("weights.txt") {
+    if let Err(err) = weights.write_latest("weights.txt") {
         panic!("{err}");
     }
 }

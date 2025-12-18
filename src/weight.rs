@@ -3,18 +3,23 @@ use rand::Rng;
 use std::{fs, io::{BufReader, BufRead}};
 
 /*
- * input: NUMCELL * NUMCELL + 1(teban) + 2(fixedstones) + 1
+ * input: NUMCELL * NUMCELL * 2 + 1(teban) + 2(fixedstones) + 1
  * hidden: 8 + 1
  * output: 1
  */
-pub const N_INPUT : usize = bitboard::CELL_2D + 1 + 2;
+pub const N_INPUT_BLACK : usize = 0;
+pub const N_INPUT_WHITE : usize = N_INPUT_BLACK + bitboard::CELL_2D;
+pub const N_INPUT_TEBAN : usize = N_INPUT_WHITE + bitboard::CELL_2D;
+pub const N_INPUT_FB : usize = N_INPUT_TEBAN + 1;
+pub const N_INPUT_FW : usize = N_INPUT_FB + 1;
+pub const N_INPUT : usize = N_INPUT_FW + 1;
 pub const N_HIDDEN : usize = 128;
 pub const N_HIDDEN2 : usize = 16;
 const N_OUTPUT : usize = 1;
-pub const N_WEIGHT_TEBAN : usize =  bitboard::CELL_2D * N_HIDDEN;
-pub const N_WEIGHT_FIXST_B : usize = N_WEIGHT_TEBAN + N_HIDDEN;
-pub const N_WEIGHT_FIXST_W : usize = N_WEIGHT_FIXST_B + N_HIDDEN;
-pub const N_WEIGHT_INPUTBIAS : usize = N_WEIGHT_FIXST_W + N_HIDDEN;
+pub const N_WEIGHT_TEBAN : usize = N_INPUT_TEBAN * N_HIDDEN;
+pub const N_WEIGHT_FIXED_B : usize = N_WEIGHT_TEBAN + N_HIDDEN;
+pub const N_WEIGHT_FIXED_W : usize = N_WEIGHT_FIXED_B + N_HIDDEN;
+pub const N_WEIGHT_INPUTBIAS : usize = N_WEIGHT_FIXED_W + N_HIDDEN;
 pub const N_WEIGHT_LAYER1 : usize = N_WEIGHT_INPUTBIAS + N_HIDDEN;
 pub const N_WEIGHT_LAYER1BIAS : usize = N_WEIGHT_LAYER1 + N_HIDDEN * N_HIDDEN2;
 pub const N_WEIGHT_LAYER2 : usize = N_WEIGHT_LAYER1BIAS + N_HIDDEN2;
@@ -22,7 +27,6 @@ const N_WEIGHT_LAYER2BIAS : usize = N_WEIGHT_LAYER2 + N_HIDDEN2;
 pub const N_WEIGHT : usize =
   (N_INPUT + 1) * N_HIDDEN + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
 
-const N_WEIGHT_PAD :usize = N_WEIGHT.div_ceil(8) * 8;
 pub const N_PROGRESS_DIV : usize = 3;
 
 #[allow(dead_code)]
@@ -42,9 +46,13 @@ const WSZV7 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * 32
         + (32 + 1) * 16 + 16 + 1;
 // ^^^^^ sigmoid
 // vvvvv relu
+#[allow(dead_code)]
 const WSZV8 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * N_HIDDEN
         + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
+#[allow(dead_code)]
 const WSZV9 : usize = WSZV8;
+const WSZV10 : usize = (bitboard::CELL_2D * 2 + 1 + 2 + 1) * N_HIDDEN
+        + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
 
 // v2
 // 8/8/1A6/2Ab3/2C3/8/8/8 w
@@ -64,6 +72,7 @@ pub enum EvalFile{
     V7,
     V8,
     V9,
+    V10,
 }
 
 impl EvalFile {
@@ -79,6 +88,7 @@ impl EvalFile {
             EvalFile::V7 => {"# 64+1+2-32-16-1"},
             EvalFile::V8 => {"# 64+1+2-128-16-1"},
             EvalFile::V9 => {"# 3x 64+1+2-128-16-1"},
+            EvalFile::V10 => {"# 3x 128+1+2-128-16-1"},
         }
     }
 
@@ -93,19 +103,20 @@ impl EvalFile {
             "# 64+1+2-32-16-1" => Some(EvalFile::V7),
             "# 64+1+2-128-16-1" => Some(EvalFile::V8),
             "# 3x 64+1+2-128-16-1" => Some(EvalFile::V9),
+            "# 3x 128+1+2-128-16-1" => Some(EvalFile::V10),
             _ => None
         }
     }
 
     #[allow(dead_code)]
     pub fn latest_header() -> String {
-        format!("# x{N_PROGRESS_DIV} 64+1+2-{N_HIDDEN}-{N_HIDDEN2}-1")
+        format!("# {N_PROGRESS_DIV}x 128+1+2-{N_HIDDEN}-{N_HIDDEN2}-1")
     }
 }
 
 #[repr(align(32))]
 pub struct Weight {
-    pub weight : [f32 ; N_WEIGHT_PAD * N_PROGRESS_DIV],
+    pub weight : Vec<Vec<f32>>,
 }
 
 impl Default for Weight {
@@ -118,9 +129,21 @@ impl Default for Weight {
 
 impl Weight {
     pub fn new() -> Weight {
-        Weight {
-            weight: [0.0 ; N_WEIGHT_PAD * N_PROGRESS_DIV]
+        let mut w = Weight {
+            weight: {
+                let mut v : Vec<Vec<f32>> = Vec::with_capacity(N_PROGRESS_DIV);
+                for ve in v.spare_capacity_mut() {
+                    ve.write(Vec::with_capacity(N_WEIGHT));
+                }
+                unsafe {v.set_len(N_PROGRESS_DIV);}
+                v
+            }
+        };
+        for we in w.weight.iter_mut() {
+            we.spare_capacity_mut().fill(std::mem::MaybeUninit::zeroed());
+            unsafe {we.set_len(N_WEIGHT);}
         }
+        w
     }
 
     pub fn init(&mut self) {
@@ -130,71 +153,63 @@ impl Weight {
                 f64::sqrt((N_INPUT + N_HIDDEN + N_HIDDEN2 + N_OUTPUT) as f64);
 
         for a in self.weight.iter_mut() {
-            *a = (rng.gen::<f64>() * 2.0 * range - range) as f32;
+            for e in a.iter_mut() {
+                *e = (rng.gen::<f64>() * 2.0 * range - range) as f32;
+            }
         }
     }
 
     /// copy weights from array
     pub fn copy_from_slice(&mut self, array : &[f32], progress : usize) {
-        let offset = progress * N_WEIGHT_PAD;
-        self.weight[offset..offset + N_WEIGHT].copy_from_slice(array);
+        self.weight[progress].copy_from_slice(array);
     }
 
     #[allow(dead_code)]
     /// fill zero.
     pub fn clear(&mut self) {
-        self.weight.iter_mut().for_each(|m| *m = 0.0);
+        self.weight.iter_mut().for_each(|v| v.fill(0f32));
     }
 
     pub fn wban(&self, progress : usize) -> &[f32] {
-        &self.weight[progress * N_WEIGHT_PAD..]
+        &self.weight[progress][..N_WEIGHT_TEBAN]
     }
 
     pub fn wteban(&self, progress : usize) -> &[f32] {
-        let offset = progress * N_WEIGHT_PAD;
-        &self.weight[offset + N_WEIGHT_TEBAN..offset + N_WEIGHT_FIXST_W]
+        &self.weight[progress][N_WEIGHT_TEBAN..N_WEIGHT_FIXED_W]
     }
 
     pub fn wfixedstones(&self, progress : usize) -> &[f32] {
-        let offset = progress * N_WEIGHT_PAD;
-        &self.weight[offset + N_WEIGHT_FIXST_B..offset + N_WEIGHT_INPUTBIAS]
+        &self.weight[progress][N_WEIGHT_FIXED_B..N_WEIGHT_INPUTBIAS]
     }
 
     #[allow(dead_code)]
     pub fn wfixedstone_b(&self, progress : usize) -> &[f32] {
-        let offset = progress * N_WEIGHT_PAD;
-        &self.weight[offset + N_WEIGHT_FIXST_B..offset + N_WEIGHT_FIXST_W]
+        &self.weight[progress][N_WEIGHT_FIXED_B..N_WEIGHT_FIXED_W]
     }
 
     #[allow(dead_code)]
     pub fn wfixedstone_w(&self, progress : usize) -> &[f32] {
-        let offset = progress * N_WEIGHT_PAD;
-        &self.weight[offset + N_WEIGHT_FIXST_W..offset + N_WEIGHT_INPUTBIAS]
+        &self.weight[progress][N_WEIGHT_FIXED_W..N_WEIGHT_INPUTBIAS]
     }
 
     pub fn wibias(&self, progress : usize) -> &[f32] {
-        let offset = progress * N_WEIGHT_PAD;
-        &self.weight[offset + N_WEIGHT_INPUTBIAS..offset + N_WEIGHT_LAYER1]
+        &self.weight[progress][N_WEIGHT_INPUTBIAS..N_WEIGHT_LAYER1]
     }
 
     pub fn wlayer1(&self, progress : usize) -> &[f32] {
-        let offset = progress * N_WEIGHT_PAD;
-        &self.weight[offset + N_WEIGHT_LAYER1..offset + N_WEIGHT_LAYER1BIAS]
+        &self.weight[progress][N_WEIGHT_LAYER1..N_WEIGHT_LAYER1BIAS]
     }
 
     pub fn wl1bias(&self, progress : usize) -> &[f32] {
-        let offset = progress * N_WEIGHT_PAD;
-        &self.weight[offset + N_WEIGHT_LAYER1BIAS..offset + N_WEIGHT_LAYER2]
+        &self.weight[progress][N_WEIGHT_LAYER1BIAS..N_WEIGHT_LAYER2]
     }
 
     pub fn wlayer2(&self, progress : usize) -> &[f32] {
-        let offset = progress * N_WEIGHT_PAD;
-        &self.weight[offset + N_WEIGHT_LAYER2..offset + N_WEIGHT_LAYER2BIAS]
+        &self.weight[progress][N_WEIGHT_LAYER2..N_WEIGHT_LAYER2BIAS]
     }
 
     pub fn wl2bias(&self, progress : usize) -> f32 {
-        let offset = progress * N_WEIGHT_PAD;
-        self.weight[offset + N_WEIGHT - 1]
+        *self.weight[progress].last().unwrap()
     }
 
     /// read eval table from a file.
@@ -241,6 +256,11 @@ impl Weight {
                             idx += 1;
                             if idx >= N_PROGRESS_DIV {return Ok(());}
                         },
+                        EvalFile::V10 => {
+                            self.readv10(&l, idx)?;
+                            idx += 1;
+                            if idx >= N_PROGRESS_DIV {return Ok(());}
+                        },
                         _ => {}
                     }
                 },
@@ -279,42 +299,53 @@ impl Weight {
         Err(String::from("v1 format is not supported any more."))
     }
 
-    fn readv8(&mut self, line : &str) -> Result<(), String> {
-        let csv = line.split(",").collect::<Vec<_>>();
-        let newtable : Vec<f32> = csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
-        let nsz = newtable.len();
-        if WSZV8 != nsz {
-            return Err(format!("size mismatch v9:{WSZV9} != {nsz}"));
-        }
-
-        for prgs in 0..N_PROGRESS_DIV {
-            let offset = prgs * N_WEIGHT_PAD;
-            self.weight[offset..offset + N_WEIGHT].copy_from_slice(&newtable);
-        }
-        // println!("v8:{:?}", self.weight);
-        Ok(())
+    fn readv8(&mut self, _line : &str) -> Result<(), String> {
+        Err(String::from("v1 format is not supported any more."))
     }
 
-    fn readv9(&mut self, line : &str, progress : usize) -> Result<(), String> {
+    fn readv9(&mut self, _line : &str, _progress : usize) -> Result<(), String> {
+        Err(String::from("v1 format is not supported any more."))
+    }
+
+    fn readv10(&mut self, line : &str, progress : usize) -> Result<(), String> {
         let csv = line.split(",").collect::<Vec<_>>();
         let newtable : Vec<f32> = csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
         let nsz = newtable.len();
-        if WSZV9 != nsz {
+        if WSZV10 != nsz {
             return Err(String::from("size mismatch"));
         }
         self.copy_from_slice(&newtable, progress);
-        // println!("v8:{:?}", self.weight);
+        // println!("v10:{:?}", self.weight);
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn writev9(&self, path : &str) ->Result<(), std::io::Error> {
         // header
         let mut outp = format!("{}\n", EvalFile::V9.to_str());
 
         // weights
         for prgs in 0..N_PROGRESS_DIV {
-            let offset = prgs * N_WEIGHT_PAD;
-            let w = &self.weight[offset..offset + N_WEIGHT];
+            let w = &self.weight[prgs];
+            let sv = w.iter().map(|a| a.to_string()).collect::<Vec<String>>();
+            outp += &sv.join(",");
+            outp += "\n";
+        }
+
+        // put to a file
+        let mut f = fs::File::create(path).unwrap();
+        f.write_all(outp.as_bytes())?;
+
+        Ok(())
+    }
+
+    pub fn write_latest(&self, path : &str) ->Result<(), std::io::Error> {
+        // header
+        let mut outp = format!("{}\n", EvalFile::latest_header());
+
+        // weights
+        for prgs in 0..N_PROGRESS_DIV {
+            let w = &self.weight[prgs];
             let sv = w.iter().map(|a| a.to_string()).collect::<Vec<String>>();
             outp += &sv.join(",");
             outp += "\n";
@@ -330,7 +361,16 @@ impl Weight {
     #[allow(dead_code)]
     pub fn copy(&mut self, src : &Weight) {
         for (d, s) in self.weight.iter_mut().zip(src.weight.iter()) {
-            *d = *s;
+            d.copy_from_slice(s);
         }
     }
+}
+
+#[test]
+fn test_weight() {
+    let weight = Weight::default();
+    assert_eq!(weight.weight.len(), 3);
+    assert_eq!(weight.weight[0].len(), N_WEIGHT);
+    assert_eq!(weight.weight[1].len(), N_WEIGHT);
+    assert_eq!(weight.weight[2].len(), N_WEIGHT);
 }
