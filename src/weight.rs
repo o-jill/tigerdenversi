@@ -129,21 +129,21 @@ impl Default for Weight {
 
 impl Weight {
     pub fn new() -> Weight {
-        Weight {
+        let mut w = Weight {
             weight: {
                 let mut v : Vec<Vec<f32>> = Vec::with_capacity(N_PROGRESS_DIV);
                 for ve in v.spare_capacity_mut() {
-                    ve.write({
-                        let mut v = Vec::with_capacity(N_WEIGHT);
-                        let e = v.spare_capacity_mut();
-                        e.fill(std::mem::MaybeUninit::zeroed());
-                        unsafe {v.set_len(N_WEIGHT);}
-                        v
-                    });
+                    ve.write(Vec::with_capacity(N_WEIGHT));
                 }
+                unsafe {v.set_len(N_PROGRESS_DIV);}
                 v
             }
+        };
+        for we in w.weight.iter_mut() {
+            we.spare_capacity_mut().fill(std::mem::MaybeUninit::zeroed());
+            unsafe {we.set_len(N_WEIGHT);}
         }
+        w
     }
 
     pub fn init(&mut self) {
@@ -171,7 +171,7 @@ impl Weight {
     }
 
     pub fn wban(&self, progress : usize) -> &[f32] {
-        &self.weight[progress]
+        &self.weight[progress][..N_WEIGHT_TEBAN]
     }
 
     pub fn wteban(&self, progress : usize) -> &[f32] {
@@ -364,4 +364,13 @@ impl Weight {
             d.copy_from_slice(s);
         }
     }
+}
+
+#[test]
+fn test_weight() {
+    let weight = Weight::default();
+    assert_eq!(weight.weight.len(), 3);
+    assert_eq!(weight.weight[0].len(), N_WEIGHT);
+    assert_eq!(weight.weight[1].len(), N_WEIGHT);
+    assert_eq!(weight.weight[2].len(), N_WEIGHT);
 }
