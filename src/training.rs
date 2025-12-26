@@ -19,6 +19,7 @@ pub struct Training {
     eta : f64,
     minibatch : i64,
     period : i32,
+    anealing_step : i32,
     stopwatch : std::time::Instant,
     testratio : i64,
     warmup : usize,
@@ -85,6 +86,7 @@ impl From<argument::Arg> for Training {
             eta : arg.eta,
             minibatch : arg.minibatch,
             period : arg.anealing,
+            anealing_step : 0,
             stopwatch : std::time::Instant::now(),
             testratio : arg.testratio as i64,
             warmup : arg.warmup,
@@ -142,14 +144,29 @@ impl Training {
         ret
     }
 
-    fn anealing_learning_rate(&self, ep : usize) -> f64 {
-        let period = self.period;
-        let caperiod = ep as i32 / period;
-        let eta = self.eta * (1.0 - self.awdecay).powi(caperiod);
-        eta * MIN_COSANEAL +
+    fn anealing_learning_rate(&mut self, ep : usize) -> (f64, bool) {
+        let mut caperiod = self.anealing_step;  // # of finished cycles
+        let mut period = self.period * (1 << caperiod);  // period for current step
+        let mut offset = (0..caperiod).fold(0usize, |a, x| a + self.period  as usize * (1 << x));
+        let mut eta = self.eta * (1.0 - self.awdecay).powi(caperiod);
+        let next_step = ep - offset == period as usize;
+        // self.putlog(&format!("ep:{ep}, cycles:{caperiod}, period:{period}, offset:{offset}\n"));
+        if next_step {
+            // move on to next period
+            self.anealing_step += 1;
+            caperiod = self.anealing_step;  // # of finished cycles
+            period = self.period * (1 << caperiod);  // period for current step
+            offset = (0..caperiod).fold(0usize, |a, x| a + self.period as usize * (1 << x));
+            eta = self.eta * (1.0 - self.awdecay).powi(caperiod);
+
+            self.putlog(&format!("next_step: ep:{ep}, cycles:{caperiod}, period:{period}, offset:{offset}\n"));
+        }
+
+        (eta * MIN_COSANEAL +
             eta * 0.5 * (1.0 - MIN_COSANEAL)
-                * (1.0 + (std::f64::consts::PI * (ep as i32 % period) as f64
-                    / (period - 1) as f64).cos())
+                * (1.0 + (std::f64::consts::PI * (ep - offset) as f64
+                    / (period - 1) as f64).cos()),
+            next_step)
     }
 
     fn epochspeed(
@@ -301,9 +318,14 @@ impl Training {
         let mut sum_loss = 0.0;
         let mut final_loss = 0f64;
         let testratio = inputs.len();
-        for ep in 0..self.epoch {
+        for ep in 0..self.epoch * 2 {
             let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
-            optm.set_lr(self.anealing_learning_rate(ep));
+            let (new_lr, next_step) = self.anealing_learning_rate(ep);
+            // stop automatically after desinated epoch
+            // and after learning w/ minimum learning rate.
+            if next_step && ep >= self.epoch {break;}
+
+            optm.set_lr(new_lr);
             for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
                 if i == iloss {continue;}
 
@@ -413,6 +435,9 @@ impl Training {
         } else {
             None
         };
+
+        self.anealing_step = 0;
+
         let trainingpart = self.trainingpart.clone();
         for (progress, en) in trainingpart.iter().enumerate() {
             if let Some(pb ) = &pbtop {pb.inc(1);}
