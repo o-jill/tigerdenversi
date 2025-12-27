@@ -172,23 +172,28 @@ impl Training {
     fn epochspeed(
         ep : usize, maxepoch : usize, loss : f64, elapsed : std::time::Duration) -> String {
         let epoch = ep + 1;
-        let speed = elapsed.as_secs_f64() / (epoch) as f64;
+        let elapsedsec = elapsed.as_secs_f64();
+        let speed = elapsedsec / epoch as f64;
 
-        let etasecs = (maxepoch - epoch) as f64 * speed;
+        let etasecs = (maxepoch as f64 - epoch as f64) * speed;
 
-        let esthour = (etasecs / 3600.0) as i32;
-        let estmin = ((etasecs - esthour as f64 * 3600.0) / 60.0) as i32;
-        let estsec = (etasecs % 60.0) as i32;
-
-        let mut res = format!("ep:{epoch:4}/{maxepoch} loss:{loss:.3} ");
-        res += &format!("ETA:{esthour:02}h{estmin:02}m{estsec:02}s ");
-        res + &if speed > 3600.0 * 1.1 {
-                format!("{:.1}hour/epoch\n", speed / 3600.0)
-            } else  if speed > 99.0 {
-                format!("{:.1}min/epoch\n", speed / 60.0)
-            } else {
-                format!("{speed:.1}sec/epoch\n")
-            }
+        format!("ep:{epoch:4}/{maxepoch} loss:{loss:.3} ")
+        + & if etasecs > 0.0 {
+            let esthour = (etasecs / 3600.0) as i32;
+            let estmin = ((etasecs - esthour as f64 * 3600.0) / 60.0) as i32;
+            let estsec = (etasecs % 60.0) as i32;
+            format!("ETA:{esthour:02}h{estmin:02}m{estsec:02}s ")
+        } else {
+            format!("ETA:--h--m--s ")
+        }
+        + & if speed > 3600.0 * 1.1 {
+            format!("{:.1}hour/epoch", speed / 3600.0)
+        } else  if speed > 99.0 {
+            format!("{:.1}min/epoch", speed / 60.0)
+        } else {
+            format!("{speed:.1}sec/epoch")
+        }
+        + &format!(" {elapsedsec:.0}sec\n")
     }
 
     fn prepare_data(&mut self, progress : usize, pb : &Option<ProgressBar>)
@@ -318,12 +323,19 @@ impl Training {
         let mut sum_loss = 0.0;
         let mut final_loss = 0f64;
         let testratio = inputs.len();
+        let mut actual_epochs = self.epoch;
+        self.anealing_step = 0;
         for ep in 0..self.epoch * 2 {
             let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
             let (new_lr, next_step) = self.anealing_learning_rate(ep);
             // stop automatically after desinated epoch
             // and after learning w/ minimum learning rate.
-            if next_step && ep >= self.epoch {break;}
+            if next_step && ep >= self.epoch {
+                actual_epochs = ep;
+                // self.putlog(&format!(
+                //     "next_step && ep >= self.epoch: {next_step} {ep}"));
+                break;
+            }
 
             optm.set_lr(new_lr);
             for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
@@ -370,7 +382,10 @@ impl Training {
             }
         }
         if let Some(pb) = pb {
-            pb.finish_with_message(format!("cos anealing - done! final loss:{final_loss:.3}"));
+            pb.set_length(actual_epochs as u64);
+            pb.set_position(actual_epochs as u64);
+            pb.finish_with_message(
+                format!("cos anealing - done! final loss:{final_loss:.3}"));
         }
     }
 
