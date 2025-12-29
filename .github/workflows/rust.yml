@@ -25,9 +25,9 @@ jobs:
         curl -L -o kifu-N0_20251219222121.zip https://github.com/o-jill/ruversi/releases/download/v0.4.0/kifu-N0_20251219222121.zip
         unzip -o -d kifu kifu-N0_20251219222121.zip
     - name: run training
-      run: cargo run --release -- --minibatch 4 --epoch 140 --anealing 10 --warmup 5 --testratio 5 --awdecay 0.1 --kifudir kifu --log "learning<DATETIME>.txt"
+      run: cargo run --release -- --minibatch 8 --epoch 100 --anealing 7 --warmup 5 --testratio 5 --awdecay 0.1 --kifudir kifu --log "learning<DATETIME>.txt"
     - name: run training  w/ progressbar
-      run: cargo run --release -- --minibatch 4 --epoch 150 --anealing 10 --warmup 5 --testratio 5 --awdecay 0.1 --kifudir kifu --log "learning<DATETIME>.txt" --progressbar
+      run: cargo run --release -- --minibatch 8 --epoch 105 --anealing 7 --warmup 5 --testratio 5 --awdecay 0.1 --kifudir kifu --log "learning<DATETIME>.txt" --progressbar
     - name: prepare for upload
       run: |
         mkdir upld
@@ -58,9 +58,9 @@ jobs:
         curl -L -o kifu-N0_20251219222121.zip https://github.com/o-jill/ruversi/releases/download/v0.4.0/kifu-N0_20251219222121.zip
         unzip -o -d kifu kifu-N0_20251219222121.zip
     - name: run training
-      run: cargo run --release -- --minibatch 4 --epoch 100 --anealing 20 --warmup 5 --testratio 5 --awdecay 0.1 --kifudir kifu --log "learning<DATETIME>.txt"
+      run: cargo run --release -- --minibatch 8 --epoch 60 --anealing 10 --warmup 5 --testratio 5 --awdecay 0.1 --kifudir kifu --log "learning<DATETIME>.txt"
     - name: run training  w/ progressbar
-      run: cargo run --release -- --minibatch 4 --epoch 300 --anealing 20 --warmup 5 --testratio 5 --awdecay 0.1 --kifudir kifu --log "learning<DATETIME>.txt" --progressbar
+      run: cargo run --release -- --minibatch 8 --epoch 70 --anealing 10 --warmup 5 --testratio 5 --awdecay 0.1 --kifudir kifu --log "learning<DATETIME>.txt" --progressbar
     - name: prepare for upload
       run: |
         mkdir upld
