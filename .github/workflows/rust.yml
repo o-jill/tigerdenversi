@@ -20,6 +20,27 @@ jobs:
       run: cargo clippy
     - name: Run tests
       run: cargo test --verbose
+    - name: download kifu sample for training
+      curl curl -L -o kifu-N0_20251219222121.zip https://github.com/o-jill/ruversi/releases/download/untagged-5a7bf4d8f3c2fdc1e41e/kifu-N0_20251219222121.zip
+      unzip -d kifu kifu-N0_20251219222121.zip
+    - name: run training
+      run: cargo run --release -- --minibatch 4 --epoch 140 --anealing 10 --warmup 5 --testratio 5 --awdecay 0.1 --kifudir kifu --log learning<DATETIME>.txt
+    - name: run training  w/ progressbar
+      run: cargo run --release -- --minibatch 4 --epoch 150 --anealing 10 --warmup 5 --testratio 5 --awdecay 0.1 --kifudir kifu --log learning<DATETIME>.txt --progressbar
+    - name: prepare for upload
+      run: |
+        mkdir upld
+        cp *.txt upld/
+    - name: Set current datetime as env variable
+      env:
+        TZ: 'Asia/Tokyo' # タイムゾーン指定
+      run: echo "CURRENT_DATETIME=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_ENV
+    - name: Save artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: learning_linux_${{ env.CURRENT_DATETIME }}
+        path: |
+          upld
 
   build_mac:
     runs-on: macos-latest
@@ -31,3 +52,24 @@ jobs:
       run: cargo clippy
     - name: Run tests
       run: cargo test --verbose
+    - name: download kifu sample for training
+      curl curl -L -o kifu-N0_20251219222121.zip https://github.com/o-jill/ruversi/releases/download/untagged-5a7bf4d8f3c2fdc1e41e/kifu-N0_20251219222121.zip
+      unzip -d kifu kifu-N0_20251219222121.zip
+    - name: run training
+      run: cargo run --release -- --minibatch 4 --epoch 100 --anealing 20 --warmup 5 --testratio 5 --awdecay 0.1 --kifudir kifu --log learning<DATETIME>.txt
+    - name: run training  w/ progressbar
+      run: cargo run --release -- --minibatch 4 --epoch 300 --anealing 20 --warmup 5 --testratio 5 --awdecay 0.1 --kifudir kifu --log learning<DATETIME>.txt --progressbar
+    - name: prepare for upload
+      run: |
+        mkdir upld
+        cp *.txt upld/
+    - name: Set current datetime as env variable
+      env:
+        TZ: 'Asia/Tokyo' # タイムゾーン指定
+      run: echo "CURRENT_DATETIME=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_ENV
+    - name: Save artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: learning_macos_${{ env.CURRENT_DATETIME }}
+        path: |
+          upld
