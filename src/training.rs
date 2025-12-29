@@ -70,7 +70,7 @@ impl From<argument::Arg> for Training {
         let mut weights = weight::Weight::default();
         if let Some(awei) = arg.weight {
             log.write_all(
-                format!("load weight from {}", &awei).as_bytes()).unwrap();
+                format!("load weight from {awei}").as_bytes()).unwrap();
             if let Err(err) = weights.read(&awei) {
                 panic!("{err}");
             }
@@ -150,7 +150,7 @@ impl Training {
         let mut offset = (0..caperiod).fold(0usize, |a, x| a + self.period  as usize * (1 << x));
         let mut eta = self.eta * (1.0 - self.awdecay).powi(caperiod);
         let next_step = ep - offset == period as usize;
-        // self.putlog(&format!("ep:{ep}, cycles:{caperiod}, period:{period}, offset:{offset}\n"));
+        // self.putlog(&format!("ep:{ep}, cycles:{caperiod}, period:{period}, offset:{offset}"));
         if next_step {
             // move on to next period
             self.anealing_step += 1;
@@ -159,7 +159,8 @@ impl Training {
             offset = (0..caperiod).fold(0usize, |a, x| a + self.period as usize * (1 << x));
             eta = self.eta * (1.0 - self.awdecay).powi(caperiod);
 
-            self.putlog(&format!("next_step: ep:{ep}, cycles:{caperiod}, period:{period}, offset:{offset}\n"));
+            self.putlog(&format!(
+                "next_step: ep:{ep}, cycles:{caperiod}, period:{period}, offset:{offset}, eta:{eta}"));
         }
 
         (eta * MIN_COSANEAL +
@@ -184,7 +185,7 @@ impl Training {
             let estsec = (etasecs % 60.0) as i32;
             format!("ETA:{esthour:02}h{estmin:02}m{estsec:02}s ")
         } else {
-            format!("ETA:--h--m--s ")
+            "ETA:--h--m--s ".to_string()
         }
         + & if speed > 3600.0 * 1.1 {
             format!("{:.1}hour/epoch", speed / 3600.0)
@@ -214,11 +215,11 @@ impl Training {
 
         let input = tch::Tensor::from_slice(
             &data_loader::extractboards(&boards)).view((boards.len() as i64, INPUTSIZE));
-        self.putlog(&format!("input : {} {:?}\n", input.dim(), input.size()));
+        self.putlog(&format!("input : {} {:?}", input.dim(), input.size()));
 
         let target = tch::Tensor::from_slice(
             &data_loader::extractscore(&boards)).view((boards.len() as i64, 1));
-        self.putlog(&format!("target: {} {:?}\n", target.dim(), target.size()));
+        self.putlog(&format!("target: {} {:?}", target.dim(), target.size()));
         if let Some(pb) = pb {pb.inc(1);}
 
         (input, target)
@@ -459,7 +460,7 @@ impl Training {
             if !*en {
                 let msg = format!("progress[{progress}] skipped.");
                 println!("{msg}");
-                self.putlog(&(msg + "\n"));
+                self.putlog(&msg);
                 continue;
             }
             let pbchild = if self.show_progressbar {
@@ -548,6 +549,11 @@ impl Training {
     }
 
     fn putlog(&mut self, msg : &str) {
+        let msg = if msg.ends_with("\n") {
+            msg
+        } else {
+            &(msg.to_string() + "\n")
+        };
         self.log.write_all(msg.as_bytes()).unwrap();
         self.log.sync_all().unwrap();
         if !self.show_progressbar {
