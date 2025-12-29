@@ -1,5 +1,5 @@
 use super::*;
-
+use chrono::Utc;
 use std::io::Write;
 use std::time::Duration;
 use tch::nn::{self, OptimizerConfig, VarStore};
@@ -41,6 +41,7 @@ impl std::fmt::Display for Training {
 
 impl From<argument::Arg> for Training {
     fn from(arg : argument::Arg) -> Self {
+        let strdt = Utc::now().format("%Y%m%d%H%M%S").to_string();
         let path = if let Some(path) = arg.log {
             path
         } else {
@@ -49,7 +50,7 @@ impl From<argument::Arg> for Training {
             } else {
                 String::from("/dev/null")
             }
-        };
+        }.replace("<DATETIME>", &strdt);
         let mut log = match std::fs::File::create(path) {
         Ok(f) => {f},
         Err(e) => {panic!("{e}")},
