@@ -22,7 +22,7 @@ jobs:
       run: cargo test --verbose
     - name: download kifu sample for training
       run: |
-        curl curl -L -o kifu-N0_20251219222121.zip https://github.com/o-jill/ruversi/releases/download/untagged-5a7bf4d8f3c2fdc1e41e/kifu-N0_20251219222121.zip
+        curl curl -L -o kifu-N0_20251219222121.zip https://github.com/o-jill/ruversi/releases/download/v0.4.0/kifu-N0_20251219222121.zip
         unzip -d kifu kifu-N0_20251219222121.zip
     - name: run training
       run: cargo run --release -- --minibatch 4 --epoch 140 --anealing 10 --warmup 5 --testratio 5 --awdecay 0.1 --kifudir kifu --log learning<DATETIME>.txt
@@ -55,7 +55,7 @@ jobs:
       run: cargo test --verbose
     - name: download kifu sample for training
       run: |
-        curl curl -L -o kifu-N0_20251219222121.zip https://github.com/o-jill/ruversi/releases/download/untagged-5a7bf4d8f3c2fdc1e41e/kifu-N0_20251219222121.zip
+        curl curl -L -o kifu-N0_20251219222121.zip https://github.com/o-jill/ruversi/releases/download/v0.4.0/kifu-N0_20251219222121.zip
         unzip -d kifu kifu-N0_20251219222121.zip
     - name: run training
       run: cargo run --release -- --minibatch 4 --epoch 100 --anealing 20 --warmup 5 --testratio 5 --awdecay 0.1 --kifudir kifu --log learning<DATETIME>.txt
