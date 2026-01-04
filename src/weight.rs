@@ -10,15 +10,25 @@ use std::{fs, io::{BufReader, BufRead}};
 pub const N_INPUT_BLACK : usize = 0;
 pub const N_INPUT_WHITE : usize = N_INPUT_BLACK + bitboard::CELL_2D;
 pub const N_INPUT_TEBAN : usize = N_INPUT_WHITE + bitboard::CELL_2D;
+#[cfg(feature = "fixed_stones")]
 pub const N_INPUT_FB : usize = N_INPUT_TEBAN + 1;
+#[cfg(feature = "fixed_stones")]
 pub const N_INPUT_FW : usize = N_INPUT_FB + 1;
+#[cfg(not(feature = "fixed_stones"))]
+pub const N_INPUT_FW : usize = N_INPUT_TEBAN;
+
 pub const N_INPUT : usize = N_INPUT_FW + 1;
+
 pub const N_HIDDEN : usize = 128;
 pub const N_HIDDEN2 : usize = 16;
 const N_OUTPUT : usize = 1;
 pub const N_WEIGHT_TEBAN : usize = N_INPUT_TEBAN * N_HIDDEN;
+#[cfg(feature = "fixed_stones")]
 pub const N_WEIGHT_FIXED_B : usize = N_WEIGHT_TEBAN + N_HIDDEN;
+#[cfg(feature = "fixed_stones")]
 pub const N_WEIGHT_FIXED_W : usize = N_WEIGHT_FIXED_B + N_HIDDEN;
+#[cfg(not(feature = "fixed_stones"))]
+pub const N_WEIGHT_FIXED_W : usize = N_WEIGHT_TEBAN;
 pub const N_WEIGHT_INPUTBIAS : usize = N_WEIGHT_FIXED_W + N_HIDDEN;
 pub const N_WEIGHT_LAYER1 : usize = N_WEIGHT_INPUTBIAS + N_HIDDEN;
 pub const N_WEIGHT_LAYER1BIAS : usize = N_WEIGHT_LAYER1 + N_HIDDEN * N_HIDDEN2;
@@ -53,6 +63,8 @@ const WSZV8 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * N_HIDDEN
 const WSZV9 : usize = WSZV8;
 const WSZV10 : usize = (bitboard::CELL_2D * 2 + 1 + 2 + 1) * N_HIDDEN
         + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
+const WSZV11 : usize = (bitboard::CELL_2D * 2 + 1 + 1) * N_HIDDEN
+        + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
 
 // v2
 // 8/8/1A6/2Ab3/2C3/8/8/8 w
@@ -73,6 +85,7 @@ pub enum EvalFile{
     V8,
     V9,
     V10,
+    V11,
 }
 
 impl EvalFile {
@@ -89,6 +102,7 @@ impl EvalFile {
             EvalFile::V8 => {"# 64+1+2-128-16-1"},
             EvalFile::V9 => {"# 3x 64+1+2-128-16-1"},
             EvalFile::V10 => {"# 3x 128+1+2-128-16-1"},
+            EvalFile::V11 => {"# 3x 128+1-128-16-1"},
         }
     }
 
@@ -104,13 +118,19 @@ impl EvalFile {
             "# 64+1+2-128-16-1" => Some(EvalFile::V8),
             "# 3x 64+1+2-128-16-1" => Some(EvalFile::V9),
             "# 3x 128+1+2-128-16-1" => Some(EvalFile::V10),
+            "# 3x 128+1-128-16-1" => Some(EvalFile::V11),
             _ => None
         }
     }
 
     #[allow(dead_code)]
     pub fn latest_header() -> String {
-        format!("# {N_PROGRESS_DIV}x 128+1+2-{N_HIDDEN}-{N_HIDDEN2}-1")
+        #[cfg(feature = "fixed_stones")] {
+            format!("# {N_PROGRESS_DIV}x 128+1+2-{N_HIDDEN}-{N_HIDDEN2}-1")
+        }
+        #[cfg(not(feature = "fixed_stones"))] {
+            format!("# {N_PROGRESS_DIV}x 128+1-{N_HIDDEN}-{N_HIDDEN2}-1")
+        }
     }
 }
 
@@ -175,19 +195,31 @@ impl Weight {
     }
 
     pub fn wteban(&self, progress : usize) -> &[f32] {
+        #[cfg(feature = "fixed_stones")] {
         &self.weight[progress][N_WEIGHT_TEBAN..N_WEIGHT_FIXED_W]
+        }
+        #[cfg(not(feature = "fixed_stones"))] {
+            &self.weight[progress][N_WEIGHT_TEBAN..N_WEIGHT_INPUTBIAS]
+        }
     }
 
     pub fn wfixedstones(&self, progress : usize) -> &[f32] {
-        &self.weight[progress][N_WEIGHT_FIXED_B..N_WEIGHT_INPUTBIAS]
+        #[cfg(feature = "fixed_stones")]{
+            &self.weight[progress][N_WEIGHT_FIXED_B..N_WEIGHT_INPUTBIAS]
+        }
+        #[cfg(not(feature = "fixed_stones"))] {
+            &self.weight[progress][..N_WEIGHT_INPUTBIAS]
+        }
     }
 
     #[allow(dead_code)]
+    #[cfg(feature = "fixed_stones")]
     pub fn wfixedstone_b(&self, progress : usize) -> &[f32] {
         &self.weight[progress][N_WEIGHT_FIXED_B..N_WEIGHT_FIXED_W]
     }
 
     #[allow(dead_code)]
+    #[cfg(feature = "fixed_stones")]
     pub fn wfixedstone_w(&self, progress : usize) -> &[f32] {
         &self.weight[progress][N_WEIGHT_FIXED_W..N_WEIGHT_INPUTBIAS]
     }
@@ -261,6 +293,11 @@ impl Weight {
                             idx += 1;
                             if idx >= N_PROGRESS_DIV {return Ok(());}
                         },
+                        EvalFile::V11 => {
+                            self.readv11(&l, idx)?;
+                            idx += 1;
+                            if idx >= N_PROGRESS_DIV {return Ok(());}
+                        },
                         _ => {}
                     }
                 },
@@ -280,31 +317,31 @@ impl Weight {
     }
 
     fn readv3(&mut self, _line : &str) -> Result<(), String> {
-        Err(String::from("v2 format is not supported any more."))
+        Err(String::from("v3 format is not supported any more."))
     }
 
     fn readv4(&mut self, _line : &str) -> Result<(), String> {
-        Err(String::from("v2 format is not supported any more."))
+        Err(String::from("v4 format is not supported any more."))
     }
 
     fn readv5(&mut self, _line : &str) -> Result<(), String> {
-        Err(String::from("v2 format is not supported any more."))
+        Err(String::from("v5 format is not supported any more."))
     }
 
     fn readv6(&mut self, _line : &str) -> Result<(), String> {
-        Err(String::from("v1 format is not supported any more."))
+        Err(String::from("v6 format is not supported any more."))
     }
 
     fn readv7(&mut self, _line : &str) -> Result<(), String> {
-        Err(String::from("v1 format is not supported any more."))
+        Err(String::from("v7 format is not supported any more."))
     }
 
     fn readv8(&mut self, _line : &str) -> Result<(), String> {
-        Err(String::from("v1 format is not supported any more."))
+        Err(String::from("v8 format is not supported any more."))
     }
 
     fn readv9(&mut self, _line : &str, _progress : usize) -> Result<(), String> {
-        Err(String::from("v1 format is not supported any more."))
+        Err(String::from("v9 format is not supported any more."))
     }
 
     fn readv10(&mut self, line : &str, progress : usize) -> Result<(), String> {
@@ -316,6 +353,18 @@ impl Weight {
         }
         self.copy_from_slice(&newtable, progress);
         // println!("v10:{:?}", self.weight);
+        Ok(())
+    }
+
+    fn readv11(&mut self, line : &str, progress : usize) -> Result<(), String> {
+        let csv = line.split(",").collect::<Vec<_>>();
+        let newtable : Vec<f32> = csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
+        let nsz = newtable.len();
+        if WSZV11 != nsz {
+            return Err(String::from("size mismatch"));
+        }
+        self.copy_from_slice(&newtable, progress);
+        // println!("v11:{:?}", self.weight);
         Ok(())
     }
 

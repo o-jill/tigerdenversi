@@ -81,6 +81,7 @@ pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8, i8, i8)>,
     if show_path {print!("{msg}");}
 }
 
+#[cfg(feature = "fixed_stones")]
 pub fn extractboards(boards : &[(bitboard::BitBoard, i8, i8, i8)])
         -> Vec<f32> {
     boards.iter().map(|(b, fb, fw, _s)| {
@@ -94,6 +95,22 @@ pub fn extractboards(boards : &[(bitboard::BitBoard, i8, i8, i8)])
         v[weight::N_INPUT_TEBAN] = b.teban as f32;
         v[weight::N_INPUT_FB] = *fb as f32;
         v[weight::N_INPUT_FW] = *fw as f32;
+        v
+    }).collect::<Vec<[f32 ; INPUTSIZE as usize]>>().concat()
+}
+
+#[cfg(not(feature = "fixed_stones"))]
+pub fn extractboards(boards : &[(bitboard::BitBoard, i8, i8, i8)])
+        -> Vec<f32> {
+    boards.iter().map(|(b, _fb, _fw, _s)| {
+        let mut v = [0.0f32 ; INPUTSIZE as usize];
+        for y in 0..8 {
+            for x in 0..8 {
+                v[x + bitboard::NUMCELL * y + weight::N_INPUT_BLACK] = b.black_at(x, y);
+                v[x + bitboard::NUMCELL * y + weight::N_INPUT_WHITE] = b.white_at(x, y);
+            }
+        }
+        v[weight::N_INPUT_TEBAN] = b.teban as f32;
         v
     }).collect::<Vec<[f32 ; INPUTSIZE as usize]>>().concat()
 }
@@ -131,7 +148,7 @@ fn test_extract_boards() {
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
-        1f32, 0f32, 0f32,
+        1f32,  // 0f32, 0f32,
         // "h/h/h/h/H/H/H/H w"
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
@@ -149,7 +166,7 @@ fn test_extract_boards() {
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
-        -1f32, 32f32, 32f32,
+        -1f32,  // 32f32, 32f32,
         // "Ag/Ga/Bf/Fb/Ce/Ec/Dd/dD b"
         1f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         1f32,1f32,1f32,1f32,1f32,1f32,1f32,0f32,
@@ -167,7 +184,7 @@ fn test_extract_boards() {
         0f32,0f32,0f32,0f32,0f32,1f32,1f32,1f32,
         0f32,0f32,0f32,0f32,1f32,1f32,1f32,1f32,
         1f32,1f32,1f32,1f32,0f32,0f32,0f32,0f32,
-        1f32, 11f32,17f32,
+        1f32,  // 11f32,17f32,
     ];
 
     assert_eq!(convert, answer);
