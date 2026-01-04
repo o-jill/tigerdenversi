@@ -1,5 +1,5 @@
 use super::*;
-
+use chrono::Utc;
 use std::io::Write;
 use std::time::Duration;
 use tch::nn::{self, OptimizerConfig, VarStore};
@@ -19,6 +19,7 @@ pub struct Training {
     eta : f64,
     minibatch : i64,
     period : i32,
+    anealing_step : i32,
     stopwatch : std::time::Instant,
     testratio : i64,
     warmup : usize,
@@ -40,6 +41,7 @@ impl std::fmt::Display for Training {
 
 impl From<argument::Arg> for Training {
     fn from(arg : argument::Arg) -> Self {
+        let strdt = Utc::now().format("%Y%m%d%H%M%S").to_string();
         let path = if let Some(path) = arg.log {
             path
         } else {
@@ -48,7 +50,7 @@ impl From<argument::Arg> for Training {
             } else {
                 String::from("/dev/null")
             }
-        };
+        }.replace("<DATETIME>", &strdt);
         let mut log = match std::fs::File::create(path) {
         Ok(f) => {f},
         Err(e) => {panic!("{e}")},
@@ -69,7 +71,7 @@ impl From<argument::Arg> for Training {
         let mut weights = weight::Weight::default();
         if let Some(awei) = arg.weight {
             log.write_all(
-                format!("load weight from {}", &awei).as_bytes()).unwrap();
+                format!("load weight from {awei}").as_bytes()).unwrap();
             if let Err(err) = weights.read(&awei) {
                 panic!("{err}");
             }
@@ -85,6 +87,7 @@ impl From<argument::Arg> for Training {
             eta : arg.eta,
             minibatch : arg.minibatch,
             period : arg.anealing,
+            anealing_step : 0,
             stopwatch : std::time::Instant::now(),
             testratio : arg.testratio as i64,
             warmup : arg.warmup,
@@ -142,36 +145,57 @@ impl Training {
         ret
     }
 
-    fn anealing_learning_rate(&self, ep : usize) -> f64 {
-        let period = self.period;
-        let caperiod = ep as i32 / period;
-        let eta = self.eta * (1.0 - self.awdecay).powi(caperiod);
-        eta * MIN_COSANEAL +
+    fn anealing_learning_rate(&mut self, ep : usize) -> (f64, bool) {
+        let mut caperiod = self.anealing_step;  // # of finished cycles
+        let mut period = self.period * (1 << caperiod);  // period for current step
+        let mut offset = (0..caperiod).fold(0usize, |a, x| a + self.period  as usize * (1 << x));
+        let mut eta = self.eta * (1.0 - self.awdecay).powi(caperiod);
+        let next_step = ep - offset == period as usize;
+        // self.putlog(&format!("ep:{ep}, cycles:{caperiod}, period:{period}, offset:{offset}"));
+        if next_step {
+            // move on to next period
+            self.anealing_step += 1;
+            caperiod = self.anealing_step;  // # of finished cycles
+            period = self.period * (1 << caperiod);  // period for current step
+            offset = (0..caperiod).fold(0usize, |a, x| a + self.period as usize * (1 << x));
+            eta = self.eta * (1.0 - self.awdecay).powi(caperiod);
+
+            self.putlog(&format!(
+                "next_step: ep:{ep}, cycles:{caperiod}, period:{period}, offset:{offset}, eta:{eta}"));
+        }
+
+        (eta * MIN_COSANEAL +
             eta * 0.5 * (1.0 - MIN_COSANEAL)
-                * (1.0 + (std::f64::consts::PI * (ep as i32 % period) as f64
-                    / (period - 1) as f64).cos())
+                * (1.0 + (std::f64::consts::PI * (ep - offset) as f64
+                    / (period - 1) as f64).cos()),
+            next_step)
     }
 
     fn epochspeed(
         ep : usize, maxepoch : usize, loss : f64, elapsed : std::time::Duration) -> String {
         let epoch = ep + 1;
-        let speed = elapsed.as_secs_f64() / (epoch) as f64;
+        let elapsedsec = elapsed.as_secs_f64();
+        let speed = elapsedsec / epoch as f64;
 
-        let etasecs = (maxepoch - epoch) as f64 * speed;
+        let etasecs = (maxepoch as f64 - epoch as f64) * speed;
 
-        let esthour = (etasecs / 3600.0) as i32;
-        let estmin = ((etasecs - esthour as f64 * 3600.0) / 60.0) as i32;
-        let estsec = (etasecs % 60.0) as i32;
-
-        let mut res = format!("ep:{epoch:4}/{maxepoch} loss:{loss:.3} ");
-        res += &format!("ETA:{esthour:02}h{estmin:02}m{estsec:02}s ");
-        res + &if speed > 3600.0 * 1.1 {
-                format!("{:.1}hour/epoch\n", speed / 3600.0)
-            } else  if speed > 99.0 {
-                format!("{:.1}min/epoch\n", speed / 60.0)
-            } else {
-                format!("{speed:.1}sec/epoch\n")
-            }
+        format!("ep:{epoch:4}/{maxepoch} loss:{loss:.3} ")
+        + & if etasecs > 0.0 {
+            let esthour = (etasecs / 3600.0) as i32;
+            let estmin = ((etasecs - esthour as f64 * 3600.0) / 60.0) as i32;
+            let estsec = (etasecs % 60.0) as i32;
+            format!("ETA:{esthour:02}h{estmin:02}m{estsec:02}s ")
+        } else {
+            "ETA:--h--m--s ".to_string()
+        }
+        + & if speed > 3600.0 * 1.1 {
+            format!("{:.1}hour/epoch", speed / 3600.0)
+        } else  if speed > 99.0 {
+            format!("{:.1}min/epoch", speed / 60.0)
+        } else {
+            format!("{speed:.1}sec/epoch")
+        }
+        + &format!(" {elapsedsec:.0}sec\n")
     }
 
     fn prepare_data(&mut self, progress : usize, pb : &Option<ProgressBar>)
@@ -192,11 +216,11 @@ impl Training {
 
         let input = tch::Tensor::from_slice(
             &data_loader::extractboards(&boards)).view((boards.len() as i64, INPUTSIZE));
-        self.putlog(&format!("input : {} {:?}\n", input.dim(), input.size()));
+        self.putlog(&format!("input : {} {:?}", input.dim(), input.size()));
 
         let target = tch::Tensor::from_slice(
             &data_loader::extractscore(&boards)).view((boards.len() as i64, 1));
-        self.putlog(&format!("target: {} {:?}\n", target.dim(), target.size()));
+        self.putlog(&format!("target: {} {:?}", target.dim(), target.size()));
         if let Some(pb) = pb {pb.inc(1);}
 
         (input, target)
@@ -301,9 +325,21 @@ impl Training {
         let mut sum_loss = 0.0;
         let mut final_loss = 0f64;
         let testratio = inputs.len();
-        for ep in 0..self.epoch {
+        let mut actual_epochs = self.epoch;
+        self.anealing_step = 0;
+        for ep in 0..self.epoch * 2 {
             let iloss = if inputs.len() > 1 {ep % inputs.len()} else {99999};
-            optm.set_lr(self.anealing_learning_rate(ep));
+            let (new_lr, next_step) = self.anealing_learning_rate(ep);
+            // stop automatically after desinated epoch
+            // and after learning w/ minimum learning rate.
+            if next_step && ep >= self.epoch {
+                actual_epochs = ep;
+                // self.putlog(&format!(
+                //     "next_step && ep >= self.epoch: {next_step} {ep}"));
+                break;
+            }
+
+            optm.set_lr(new_lr);
             for ((i, inp), tar) in inputs.iter().enumerate().zip(targets.iter()) {
                 if i == iloss {continue;}
 
@@ -348,7 +384,10 @@ impl Training {
             }
         }
         if let Some(pb) = pb {
-            pb.finish_with_message(format!("cos anealing - done! final loss:{final_loss:.3}"));
+            pb.set_length(actual_epochs as u64);
+            pb.set_position(actual_epochs as u64);
+            pb.finish_with_message(
+                format!("cos anealing - done! final loss:{final_loss:.3}"));
         }
     }
 
@@ -413,13 +452,16 @@ impl Training {
         } else {
             None
         };
+
+        self.anealing_step = 0;
+
         let trainingpart = self.trainingpart.clone();
         for (progress, en) in trainingpart.iter().enumerate() {
             if let Some(pb ) = &pbtop {pb.inc(1);}
             if !*en {
                 let msg = format!("progress[{progress}] skipped.");
                 println!("{msg}");
-                self.putlog(&(msg + "\n"));
+                self.putlog(&msg);
                 continue;
             }
             let pbchild = if self.show_progressbar {
@@ -508,6 +550,11 @@ impl Training {
     }
 
     fn putlog(&mut self, msg : &str) {
+        let msg = if msg.ends_with("\n") {
+            msg
+        } else {
+            &(msg.to_string() + "\n")
+        };
         self.log.write_all(msg.as_bytes()).unwrap();
         self.log.sync_all().unwrap();
         if !self.show_progressbar {
