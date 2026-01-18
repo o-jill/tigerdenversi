@@ -717,7 +717,7 @@ impl BitBoard {
     }
 
     pub fn is_full(&self) -> bool {
-        (self.black | self.white) == 0xffffffffffffffff
+        (self.black | self.white) == u64::MAX
     }
 
     pub fn flip_all(&self) -> BitBoard {
