@@ -720,6 +720,14 @@ impl BitBoard {
         (self.black | self.white) == u64::MAX
     }
 
+    pub fn is_last1_or_full(&self) -> bool {
+        (self.black | self.white).count_zeros() <= 1
+    }
+
+    pub fn is_last1(&self) -> bool {
+        (self.black | self.white).count_zeros() == 1
+    }
+
     pub fn flip_all(&self) -> BitBoard {
         BitBoard {
             black : self.white,
