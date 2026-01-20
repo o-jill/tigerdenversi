@@ -40,7 +40,12 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize,
         let kifu = kifu::Kifu::from(&lines);
         kifu.list.par_iter().filter_map(|t| {
             let ban = bitboard::BitBoard::from(&t.rfen).unwrap();
-            if ban.is_full() || !ban.is_progress(progress) {return None;}
+            // 最後の局面とか覚えたい進行度の時じゃない
+            // if ban.is_full() || !ban.is_progress(progress) {return None;}
+            // 最後の局面とか後言っての局面とか覚えたい進行度の時じゃない
+            if ban.is_last1_or_full() || !ban.is_progress(progress) {
+                return None;
+            }
 
             let (fsb, fsw) = ban.fixedstones();
             let score = kifu.score.unwrap();

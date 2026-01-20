@@ -724,6 +724,7 @@ impl BitBoard {
         (self.black | self.white).count_zeros() <= 1
     }
 
+    #[allow(dead_code)]
     pub fn is_last1(&self) -> bool {
         (self.black | self.white).count_zeros() == 1
     }
