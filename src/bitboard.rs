@@ -717,7 +717,16 @@ impl BitBoard {
     }
 
     pub fn is_full(&self) -> bool {
-        (self.black | self.white) == 0xffffffffffffffff
+        (self.black | self.white) == u64::MAX
+    }
+
+    pub fn is_last1_or_full(&self) -> bool {
+        (self.black | self.white).count_zeros() <= 1
+    }
+
+    #[allow(dead_code)]
+    pub fn is_last1(&self) -> bool {
+        (self.black | self.white).count_zeros() == 1
     }
 
     pub fn flip_all(&self) -> BitBoard {
