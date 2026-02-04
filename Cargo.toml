@@ -18,3 +18,4 @@ tch = {version = "0.18", features = ["download-libtorch"]}
 
 [features]
 fixed_stones = []
+nosimd = []
