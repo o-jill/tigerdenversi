@@ -1,6 +1,5 @@
 use super::*;
 use chrono::Utc;
-use std::io::Write;
 use std::time::Duration;
 use tch::nn::{self, OptimizerConfig, VarStore};
 use tch::{Device, data::Iter2, Kind, Tensor};
@@ -12,6 +11,7 @@ const MIN_COSANEAL : f64 = 1e-4;
 pub struct Training {
     trainingpart : Vec<bool>,
     kifudir : String,
+    matefiles : String,
     devtype : String,
     device : tch::Device,
     autostop : Option<f64>,
@@ -58,6 +58,7 @@ impl From<argument::Arg> for Training {
 
         let partlist = Self::partlist(&arg.part);
         let kifudir = arg.kifudir.unwrap_or("kifu".to_string()).clone();
+        let matefiles = arg.mate_file.unwrap_or(String::new()).clone();
         let devtype = arg.device.unwrap_or("cpu".to_string());
         let devtype = devtype.clone();
         let device    = if devtype == "mps" && tch::utils::has_mps() {
@@ -80,6 +81,7 @@ impl From<argument::Arg> for Training {
         Self {
             trainingpart : partlist,
             kifudir,
+            matefiles,
             devtype,
             device,
             autostop : arg.autostop,
@@ -201,13 +203,22 @@ impl Training {
     fn prepare_data(&mut self, progress : usize, pb : &Option<ProgressBar>)
             -> (tch::Tensor, tch::Tensor) {
         // let sta = std::time::Instant::now();
-        let mut boards = self.kifudir.split(",").flat_map(
+        let mut boards : Vec<_> = self.kifudir.split(",").flat_map(
             |d| {
                 if let Some(pb) = pb {pb.inc(1);}
                 data_loader::loadkifu(
                     &data_loader::findfiles(&format!("./{d}")),
                     d, progress, &mut self.log, pb.is_none())}
             ).collect();
+
+        if !self.matefiles.is_empty() {
+            let mut mates = self.matefiles.split(",").flat_map(|path|
+                data_loader::load_mates(path, progress).unwrap()
+            ).collect::<Vec<_>>();
+            self.putlog(&format!("mates : {} size:{}", self.matefiles, mates.len()));
+            if !mates.is_empty() {boards.append(&mut mates);}
+        }
+        if let Some(pb) = pb {pb.inc(1);}
 
         data_loader::dedupboards(&mut boards, &mut self.log, pb.is_none());
         boards.shuffle(&mut rand::thread_rng());
@@ -484,7 +495,7 @@ impl Training {
             let pbchild = if self.show_progressbar {
                 let pb = self.multibar.add(
                 ProgressBar::new(
-                    self.kifudir.chars().fold(6,
+                    self.kifudir.chars().fold(7,
                         |acc, c| if c == ',' {acc + 1} else {acc})));
                 pb.set_style(
                     ProgressStyle::with_template(
@@ -564,6 +575,32 @@ impl Training {
 
     pub fn write(&self) {
         neuralnet::writeweights(&self.weights);
+    }
+
+    pub fn extract_mate3(&mut self) -> Result<(), tch::TchError> {
+        // read kifus and extract moves.
+        let show_path = false;
+        let mut boards = self.kifudir.split(",").flat_map(
+            |d| {
+                data_loader::loadkifu(
+                    &data_loader::findfiles(&format!("./{d}")),
+                    d, weight::N_PROGRESS_DIV - 1, &mut self.log, show_path)}
+            ).collect();
+
+        data_loader::dedupboards(&mut boards, &mut self.log, show_path);
+
+        // write to a file.
+        let dest = "mate2.txt";
+        let mut f = std::fs::File::create(dest).unwrap();
+        for (ban, _, _, score) in boards {
+            if !ban.is_last_n(2) {
+                continue;
+            }
+
+            f.write_all(format!("{ban},{score}\n").as_bytes()).unwrap();
+        }
+
+        Ok(())
     }
 
     fn putlog(&mut self, msg : &str) {

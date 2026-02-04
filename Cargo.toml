@@ -15,7 +15,9 @@ rayon = "1.10.0"
 tch = {version = "0.18", features = ["download-libtorch"]}
 # tch = {version = "0.20", features = ["download-libtorch"]}
 # tch = {version = "0.22", features = ["download-libtorch"]}
+zstd = "0.13.3"
 
 [features]
 fixed_stones = []
 nosimd = []
+extract_mate3 = []

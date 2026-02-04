@@ -1,4 +1,5 @@
 use super::*;
+
 use rayon::prelude::*;
 
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
@@ -49,27 +50,101 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize,
 
             let (fsb, fsw) = ban.fixedstones();
             let score = kifu.score.unwrap();
-            Some(vec![
-                (ban.clone(), fsb, fsw, score),
-                // オーグメンテーション
-                (ban.rotate90(), fsb, fsw, score),
-                (ban.rotate180(), fsb, fsw, score),
-                (ban.rotate180().rotate90(), fsb, fsw, score),
-                (ban.flip_horz(), fsb, fsw, score),
-                (ban.flip_vert(), fsb, fsw, score),
-                // flip color
-                (ban.flip_all(), fsw, fsb, -score),
-                (ban.rotate90().flip_all(), fsw, fsb, -score),
-                (ban.rotate180().flip_all(), fsw, fsb, -score),
-                (ban.rotate180().rotate90().flip_all(), fsw, fsb, -score),
-                (ban.flip_horz().flip_all(), fsw, fsb, -score),
-                (ban.flip_vert().flip_all(), fsw, fsb, -score)
-            ])
+            let mut ret = ban.rotated_mirrored(fsb, fsw, score);
+
+            if !cfg!(feature = "extract_mate3") {return Some(ret);}
+
+            // 残り3つだったら全部の着手パターンも生成して登録する。
+            if !ban.is_last_n(3) {return Some(ret);}
+
+            let mvs = ban.genmove().unwrap();
+            if mvs.len() <= 1 {return Some(ret);}
+
+            for mvxy in mvs {
+                // newbanはmate2
+                // この局面の評価を計算して登録する
+                let newban = ban.r#move(mvxy).unwrap();
+                let mvs2 = newban.genmove().unwrap();
+                if mvs2.is_empty() || mvs2[0] == bitboard::PASS {  // pass
+                    // panic!("mvs2.is_empty() stones:{}", newban.stones());
+                    // skip solving.
+                    continue;
+                }
+
+                let scores = mvs2.iter().map(|mvxy2| {
+                    // newban2はmate1
+                    let newban2 = newban.r#move(*mvxy2).unwrap();
+                    if !newban2.is_last1() {panic!("!newban2.is_last1()");}
+
+                    let (val, _) = newban2.move_mate1();
+                    val as i8
+                }).collect::<Vec<_>>();
+                if scores.is_empty() {panic!("scores.is_empty()");}
+
+                let score = *scores.iter().reduce(|a, b| a.max(b)).unwrap();
+                let mut aug = newban.rotated_mirrored(fsb, fsw, score);
+                ret.append(&mut aug);
+            }
+            Some(ret)
         }).flatten().collect::<Vec<_>>()
     }).collect();
     if show_path {println!();}
     // println!("{}usec",sta.elapsed().as_micros());
     boards
+}
+
+fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
+        -> Result<Vec<(bitboard::BitBoard, i8, i8, i8)>, String> {
+    let mut ret = Vec::new();
+
+    for line in buf.lines() {
+        match line {
+            Err(e) => {return Err(format!("{e}"))},
+            Ok(l) => {
+                // コメント行 or 11文字未満
+                if l.len() < 11 || l.starts_with("#") {continue;}
+                // rfen,score
+                let elem : Vec<&str> = l.split(",").collect();
+                let ban = bitboard::BitBoard::from(elem[0])?;
+                if !ban.is_progress(progress) {continue;}
+
+                let (b, w) = ban.fixedstones();
+                ret.push((ban, b, w, elem[1].parse::<i8>().unwrap()));
+            }
+        }
+    }
+
+    Ok(ret)
+}
+
+pub fn load_mates(path : &str, progress : usize)
+        -> Result<Vec<(bitboard::BitBoard, i8, i8, i8)>, String> {
+    let filepath = std::path::Path::new(path);
+    if !filepath.exists() {return Err(format!("{path} does NOT exist!"));}
+
+    if path.ends_with(".zst") || path.ends_with(".zstd") {
+        let f = std::fs::File::open(path);
+        if let Err(e) = f {
+            return Err(format!("error: {e} @ File::open"));
+        }
+        let z = zstd::Decoder::new(f.unwrap());
+        if let Err(e) = z {
+            return Err(format!("error: {e} @ zstd::Decoder::new"));
+        }
+
+        let buf = std::io::BufReader::new(z.unwrap());
+        let ret = read_mate_file(buf, progress)?;
+        Ok(ret)
+    } else {
+        let f = std::fs::File::open(path);
+        if let Err(e) = f {
+            return Err(format!("{e}"));
+        }
+
+        let buf = std::io::BufReader::new(f.unwrap());
+        let ret = read_mate_file(buf, progress)?;
+        Ok(ret)
+    }
 }
 
 pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8, i8, i8)>,

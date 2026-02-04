@@ -55,4 +55,10 @@ pub struct Arg {
     /// show ascii graph
     #[arg(long, default_value_t = false)]
     pub graph : bool,
+    /// get mate2 positions from extrace mate3.
+    #[arg(long, default_value_t = false)]
+    pub extract_mate3 : bool,
+    /// paths of files which contains mate boards.
+    #[arg(long)]
+    pub mate_file : Option<String>,
 }
