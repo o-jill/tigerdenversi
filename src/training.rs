@@ -3,7 +3,7 @@ use chrono::Utc;
 use std::io::Write;
 use std::time::Duration;
 use tch::nn::{self, OptimizerConfig, VarStore};
-use tch::{Device, data::Iter2, Tensor};
+use tch::{Device, data::Iter2, Kind, Tensor};
 use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
@@ -365,6 +365,23 @@ impl Training {
             final_loss = testloss;
             self.loss_curve.push(testloss);
             self.update(testloss, &pb, ep + self.warmup, elapsed);
+            // 学習を始めたけどロスが大きいときはなにかおかしい
+            if ep > self.warmup + 5 {
+                // 少なくとも300を超えてるときはおかしい
+                const WARNING_THRESHOLD : f64 = 300f64;
+                if testloss > WARNING_THRESHOLD {
+                    let msg = format!("loss:{testloss}, ep:{ep}, lr:{new_lr}");
+                    eprintln!("{msg}");
+                    self.putlog(&msg);
+                    let msg = format!(
+                        "ep: {ep} iloss: {iloss} input_mean: {:.3} target_mean: {:.3}",
+                        inputs[iloss].mean(Kind::Float).double_value(&[]),
+                        targets[iloss].mean(Kind::Float).double_value(&[]));
+                    eprintln!("{msg}");
+                    self.putlog(&msg);
+                    panic!("{msg}");
+                }
+            }
 
             if self.autostop.is_none() {continue;}
 
