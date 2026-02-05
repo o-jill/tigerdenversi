@@ -109,7 +109,11 @@ fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
                 if !ban.is_progress(progress) {continue;}
 
                 let (b, w) = ban.fixedstones();
-                ret.push((ban, b, w, elem[1].parse::<i8>().unwrap()));
+                let score = match elem[1].parse::<i8>() {
+                    Err(msg) => {return Err(format!("error: parse score : {msg}"));},
+                    Ok(num) => {num},
+                };
+                ret.push((ban, b, w, ));
             }
         }
     }
