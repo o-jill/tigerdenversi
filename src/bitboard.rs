@@ -1696,7 +1696,7 @@ impl BitBoard {
 /// # Returns
 /// - Ok(# of empty cells) if succeeded.
 /// - Err(msg) if some error happend.
-pub fn count_emptycells(rfen : &str) -> Result<i8, String> {
+pub fn count_empty_cells(rfen : &str) -> Result<i8, String> {
     let mut count = 0;
 
     for ch in rfen.chars() {
@@ -1735,7 +1735,7 @@ pub fn count_emptycells(rfen : &str) -> Result<i8, String> {
 /// - Err(msg) if some error happend.
 #[allow(dead_code)]
 pub fn count_stones(rfen : &str) -> Result<i8, String> {
-    match count_emptycells(rfen) {
+    match count_empty_cells(rfen) {
         Ok(n) => {Ok(64 - n)},
         Err(m) => {Err(m)}
     }
@@ -2166,11 +2166,13 @@ fn testbitbrd() {
     // assert_eq!(b.fixedstones(), (31, 1));
     // let b180 = b.rotate180();
     // assert_eq!(b180.fixedstones(), (31, 1));
-    assert_eq!(count_emptycells("8/8/8/3Aa3/3aA3/8/8/8 b").unwrap(), 60);
+    assert_eq!(count_empty_cells("8/8/8/3Aa3/3aA3/8/8/8 b").unwrap(), 60);
     assert_eq!(count_stones("8/8/8/3Aa3/3aA3/8/8/8 b").unwrap(), 4);
-    assert_eq!(count_emptycells("H/aG/C5/D4/C1A3/C2A2/C3A1/C4A b").unwrap(), 25);
+    assert_eq!(
+        count_empty_cells("H/aG/C5/D4/C1A3/C2A2/C3A1/C4A b").unwrap(), 25);
     assert_eq!(count_stones("H/aG/C5/D4/C1A3/C2A2/C3A1/C4A b").unwrap(), 39);
-    assert_eq!(count_emptycells("H/AaF/C5/D4/C1A3/C2A2/C3A1/C4A b").unwrap(), 25);
+    assert_eq!(
+        count_empty_cells("H/AaF/C5/D4/C1A3/C2A2/C3A1/C4A b").unwrap(), 25);
     assert_eq!(count_stones("H/AaF/C5/D4/C1A3/C2A2/C3A1/C4A b").unwrap(), 39);
 
     let ban = BitBoard::from("8/8/8/3Aa3/2AaA3/2a5/8/8 b").unwrap();
