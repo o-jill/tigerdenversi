@@ -12,6 +12,7 @@ pub struct Training {
     trainingpart : Vec<bool>,
     kifudir : String,
     matefiles : String,
+    ruversi_config : String,
     devtype : String,
     device : tch::Device,
     autostop : Option<f64>,
@@ -59,6 +60,7 @@ impl From<argument::Arg> for Training {
         let partlist = Self::partlist(&arg.part);
         let kifudir = arg.kifudir.unwrap_or("kifu".to_string()).clone();
         let matefiles = arg.mate_file.unwrap_or(String::new()).clone();
+        let ruversi_config = arg.ru_config.unwrap_or(String::new());
         let devtype = arg.device.unwrap_or("cpu".to_string());
         let devtype = devtype.clone();
         let device    = if devtype == "mps" && tch::utils::has_mps() {
@@ -82,6 +84,7 @@ impl From<argument::Arg> for Training {
             trainingpart : partlist,
             kifudir,
             matefiles,
+            ruversi_config,
             devtype,
             device,
             autostop : arg.autostop,
@@ -213,7 +216,10 @@ impl Training {
 
         if !self.matefiles.is_empty() {
             let mut mates = self.matefiles.split(",").flat_map(|path|
-                data_loader::load_mates(path, progress).unwrap()
+                match data_loader::load_mates(path, progress) {
+                    Ok(arr) => {arr},
+                    Err(msg) => {panic!("{msg}")},
+                }
             ).collect::<Vec<_>>();
             self.putlog(&format!("mates : {} size:{}", self.matefiles, mates.len()));
             if !mates.is_empty() {boards.append(&mut mates);}
@@ -577,17 +583,145 @@ impl Training {
         neuralnet::writeweights(&self.weights);
     }
 
-    pub fn extract_mate3(&mut self) -> Result<(), tch::TchError> {
+    pub fn extract_mate(&mut self, n : u32) -> Result<(), tch::TchError> {
+        if n == 3 {
+            return self.extract_mate3();
+        }
+
+        let pbtop = if self.show_progressbar {
+            let pb = self.multibar.add(ProgressBar::new(8));
+            // kifudir, load, dedup, extract, dedup, augmentation, dedup, store
+            Some(pb)
+        } else {
+            None
+        };
+
         // read kifus and extract moves.
+        if let Some(pb ) = &pbtop {pb.inc(1);}  // 1
+        let pbchild = if self.show_progressbar {
+            let pb = self.multibar.add(
+            ProgressBar::new(
+                self.kifudir.chars().fold(1,
+                    |acc, c| if c == ',' {acc + 1} else {acc})));
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
+                .progress_chars("🪵🪓🌴"));
+            pb.set_message("loading kifu...");
+            Some(pb)
+        } else {
+            None
+        };
         let show_path = false;
         let mut boards = self.kifudir.split(",").flat_map(
             |d| {
-                data_loader::loadkifu(
+                let ret = data_loader::loadkifu_for_mate(
                     &data_loader::findfiles(&format!("./{d}")),
-                    d, weight::N_PROGRESS_DIV - 1, &mut self.log, show_path)}
-            ).collect();
+                    d, n, &mut self.log, show_path);
+                if let Some(pb) = &pbchild {pb.inc(1);}
+                ret
+            }).collect();
+        if let Some(pb) = &pbchild {pb.finish();}
+        if let Some(pb ) = &pbtop {pb.inc(1);}  // 2
 
         data_loader::dedupboards(&mut boards, &mut self.log, show_path);
+        if let Some(pb ) = &pbtop {pb.inc(1);}  // 3
+
+        // ruversiに展開してもらう
+        let pbchild = if self.show_progressbar {
+            let pb = self.multibar.add(
+            ProgressBar::new(boards.len() as u64));
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}] {wide_bar} [{eta_precise}] {pos}/{len} {msg}").unwrap()
+                .progress_chars("📗📖📓"));
+            Some(pb)
+        } else {
+            None
+        };
+        let mut mates = boards.iter().flat_map(|(ban, _, _, _)| {
+            let rr = ruversirunner::RuversiRunner::from_config(
+                &std::path::PathBuf::from(
+                    self.ruversi_config.clone())).unwrap();
+            // rr.set_verbose(true);
+            match rr.run_children(&ban.to_string()) {
+                Err(msg) => {panic!("{msg}")},
+                Ok(ban) => {
+                    if let Some(pb) = &pbchild {pb.inc(1);}
+                    ban
+                },
+            }
+        }).collect::<Vec<_>>();
+        if let Some(pb) = &pbchild {pb.finish();}
+        if let Some(pb ) = &pbtop {pb.inc(1);}  // 4
+
+        data_loader::dedupboards(&mut mates, &mut self.log, show_path);
+        if let Some(pb ) = &pbtop {pb.inc(1);}  // 5
+
+        // augmentation
+        let mut newmates = mates.iter().flat_map(|(ban, fsb, fsw, score)| {
+            ban.rotated_mirrored(*fsb, *fsw, *score)
+        }).collect::<Vec<_>>();
+        if let Some(pb ) = &pbtop {pb.inc(1);}  // 6
+
+        data_loader::dedupboards(&mut newmates, &mut self.log, show_path);
+        if let Some(pb ) = &pbtop {pb.inc(1);}  // 7
+
+        // write to a file.
+        let n1 = n - 1;
+        let dest = format!("mate{n1}.txt");
+        let mut f = std::fs::File::create(dest).unwrap();
+        for (ban, _, _, score) in mates {
+            if !ban.is_last_n(n1) {
+                continue;
+            }
+
+            f.write_all(format!("{ban},{score}\n").as_bytes()).unwrap();
+        }
+        if let Some(pb ) = &pbtop {
+            pb.inc(1);  // 8
+            pb.finish_with_message("done!");
+        }
+        Ok(())
+    }
+
+    pub fn extract_mate3(&mut self) -> Result<(), tch::TchError> {
+        let pbtop = if self.show_progressbar {
+            let pb = self.multibar.add(ProgressBar::new(6));
+            // kifudir, load, dedup, extract, dedup, store
+            Some(pb)
+        } else {
+            None
+        };
+
+        // read kifus and extract moves.
+        let pbchild = if self.show_progressbar {
+            let pb = self.multibar.add(
+            ProgressBar::new(
+                self.kifudir.chars().fold(1,
+                    |acc, c| if c == ',' {acc + 1} else {acc})));
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
+                .progress_chars("🪵🪓🌴"));
+            pb.set_message("loading kifu...");
+            Some(pb)
+        } else {
+            None
+        };
+        let show_path = false;
+        let mut boards = self.kifudir.split(",").flat_map(
+            |d| {
+                let ret = data_loader::loadkifu_for_mate(
+                    &data_loader::findfiles(&format!("./{d}")),
+                    d, 3, &mut self.log, show_path);
+                if let Some(pb) = &pbchild {pb.inc(1);}
+                ret
+            }).collect();
+        if let Some(pb ) = &pbtop {pb.inc(1);}  // 1
+
+        data_loader::dedupboards(&mut boards, &mut self.log, show_path);
+        if let Some(pb ) = &pbtop {pb.inc(1);}  // 2
 
         // write to a file.
         let dest = "mate2.txt";
@@ -598,6 +732,11 @@ impl Training {
             }
 
             f.write_all(format!("{ban},{score}\n").as_bytes()).unwrap();
+        }
+
+        if let Some(pb ) = &pbtop {
+            pb.inc(1);  // 3
+            pb.finish_with_message("done!");
         }
 
         Ok(())

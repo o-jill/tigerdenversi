@@ -51,8 +51,8 @@ impl RuversiRunner {
             curdir : String::from("../ruversi"),
             path : String::from("./target/release/ruversi"),
             evfile : String::from("data/evaltable.txt"),
-            verbose : true,
-            args : vec!["--think_all".to_string()],
+            verbose : false,
+            args : vec!["--thinkall".to_string()],
         }
     }
 
@@ -206,9 +206,9 @@ impl RuversiRunner {
         let w = cmd.wait_with_output().unwrap();
         std::env::set_current_dir(curdir).unwrap();
         let txt = String::from_utf8(w.stdout).unwrap();
-        eprintln!("txt:{txt}");
+        // eprintln!("txt:{txt}");
         let lines : Vec<_> = txt.split("\n").collect();
-        if lines.len() < 13 {
+        if lines.len() < 10 {
             return Err(format!("invalid input {lines:?}"));
         }
 

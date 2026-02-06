@@ -258,6 +258,13 @@ impl Default for BitBoard {
     }
 }
 
+impl std::cmp::PartialOrd for BitBoard {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.black.cmp(&other.black).then(
+            self.white.cmp(&other.white).then(self.teban.cmp(&other.teban))))
+    }
+}
+
 impl std::fmt::Display for BitBoard {
     /// convert to RFEN format
     ///

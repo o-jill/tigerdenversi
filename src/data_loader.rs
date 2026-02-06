@@ -91,6 +91,64 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize,
     boards
 }
 
+pub fn loadkifu_for_mate(files : &[String], d : &str, mate : u32,
+        log : &mut std::fs::File, show_path : bool)
+        -> Vec<(bitboard::BitBoard, i8, i8, i8)> {
+    // let sta = std::time::Instant::now();
+    let shared = std::sync::Mutex::new(log);
+    let boards = files.par_iter().flat_map(|fname| {
+        let path = format!("{d}/{fname}");
+        {
+            let mut l = shared.lock().unwrap();
+            l.write_all(format!("{path}\n").as_bytes()).unwrap();
+            if show_path {print!("{path}\r");}
+        }
+        let content = std::fs::read_to_string(&path).unwrap();
+        let lines: Vec<&str> = content.split('\n').collect();
+        let kifu = kifu::Kifu::from(&lines);
+        kifu.list.par_iter().filter_map(|t| {
+            let ban = bitboard::BitBoard::from(&t.rfen).unwrap();
+            // 指定の局面じゃない
+            if !ban.is_last_n(mate) {return None;}
+
+            let mut ret = Vec::new();
+
+            let mvs = ban.genmove().unwrap();
+            if mvs.len() <= 1 {return Some(ret);}
+
+            for mvxy in mvs {
+                // newbanはmate(N-1)
+                // この局面の評価を計算して登録する
+                let newban = ban.r#move(mvxy).unwrap();
+                let mvs2 = newban.genmove().unwrap();
+                if mvs2.is_empty() || mvs2[0] == bitboard::PASS {  // pass
+                    // panic!("mvs2.is_empty() stones:{}", newban.stones());
+                    // skip solving.
+                    continue;
+                }
+
+                let scores = mvs2.iter().map(|mvxy2| {
+                    // newban2はmate(N-1)
+                    let newban2 = newban.r#move(*mvxy2).unwrap();
+                    if !newban2.is_last_n(mate - 2) {panic!("!ban.is_last_n(mate{mate} - 2)");}
+
+                    let (val, _) = newban2.move_mate1();
+                    val as i8
+                }).collect::<Vec<_>>();
+                if scores.is_empty() {panic!("scores.is_empty()");}
+
+                let score = *scores.iter().reduce(|a, b| a.max(b)).unwrap();
+                let (fsb, fsw) = newban.fixedstones();
+                ret.append(&mut vec![(newban, fsb, fsw, score)]);
+            }
+            Some(ret)
+        }).flatten().collect::<Vec<_>>()
+    }).collect();
+    if show_path {println!();}
+    // println!("{}usec",sta.elapsed().as_micros());
+    boards
+}
+
 fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
         -> Result<Vec<(bitboard::BitBoard, i8, i8, i8)>, String> {
     let mut ret = Vec::new();
@@ -111,7 +169,7 @@ fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
                     Err(msg) => {return Err(format!("error: parse score : {msg}"));},
                     Ok(num) => {num},
                 };
-                ret.push((ban, b, w, ));
+                ret.push((ban, b, w, score));
             }
         }
     }
@@ -154,7 +212,7 @@ pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8, i8, i8)>,
     // println!("board: {} boards", boards.len());
     // let sta = std::time::Instant::now();
     boards.sort_by(|a, b| {
-        a.0.black.cmp(&b.0.black).then(a.0.white.cmp(&b.0.white))
+        a.0.partial_cmp(&b.0).unwrap()
     });
     boards.dedup_by(|a, b| {a == b});
     // println!("{}usec",sta.elapsed().as_micros());
