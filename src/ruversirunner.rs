@@ -222,7 +222,7 @@ impl RuversiRunner {
             // val,-1.62,8/8/8/2C3/3Aa3/8/8/8 w,507 nodes. c3D3
             // val,-1.50,8/8/8/3aA3/3C2/8/8/8 w,2357 nodes. d6C4f4C5f6G5d3
             // val,-1.13,8/8/8/3aA3/3B3/4A3/8/8 w,1262 nodes. f4D3e7F3e3F6d6
-            let scoreptn = regex::Regex::new("val,([-0-9.]+),([0-8A-Ha-h/]+ [bw]), ").unwrap();
+            let scoreptn = regex::Regex::new("val,([-0-9.]+),([0-8A-Ha-h\\/]+ [bw]),").unwrap();
             let ret = match scoreptn.captures(&line) {
                 Some(cap) => {
                     // cap[1] : val, cap[2] : rfen
