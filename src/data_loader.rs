@@ -106,43 +106,17 @@ pub fn loadkifu_for_mate(files : &[String], d : &str, mate : u32,
         let content = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();
         let kifu = kifu::Kifu::from(&lines);
-        kifu.list.par_iter().filter_map(|t| {
+        kifu.list.iter().filter_map(|t| {
             let ban = bitboard::BitBoard::from(&t.rfen).unwrap();
             // 指定の局面じゃない
-            if !ban.is_last_n(mate) {return None;}
-
-            let mut ret = Vec::new();
-
-            let mvs = ban.genmove().unwrap();
-            if mvs.len() <= 1 {return Some(ret);}
-
-            for mvxy in mvs {
-                // newbanはmate(N-1)
-                // この局面の評価を計算して登録する
-                let newban = ban.r#move(mvxy).unwrap();
-                let mvs2 = newban.genmove().unwrap();
-                if mvs2.is_empty() || mvs2[0] == bitboard::PASS {  // pass
-                    // panic!("mvs2.is_empty() stones:{}", newban.stones());
-                    // skip solving.
-                    continue;
-                }
-
-                let scores = mvs2.iter().map(|mvxy2| {
-                    // newban2はmate(N-1)
-                    let newban2 = newban.r#move(*mvxy2).unwrap();
-                    if !newban2.is_last_n(mate - 2) {panic!("!ban.is_last_n(mate{mate} - 2)");}
-
-                    let (val, _) = newban2.move_mate1();
-                    val as i8
-                }).collect::<Vec<_>>();
-                if scores.is_empty() {panic!("scores.is_empty()");}
-
-                let score = *scores.iter().reduce(|a, b| a.max(b)).unwrap();
-                let (fsb, fsw) = newban.fixedstones();
-                ret.append(&mut vec![(newban, fsb, fsw, score)]);
+            if ban.is_last_n(mate) {
+                let score = ban.count();
+                let (fsb, fsw) = ban.fixedstones();
+                Some((ban, fsb, fsw, score))
+            } else {
+                None
             }
-            Some(ret)
-        }).flatten().collect::<Vec<_>>()
+        }).collect::<Vec<_>>()
     }).collect();
     if show_path {println!();}
     // println!("{}usec",sta.elapsed().as_micros());
