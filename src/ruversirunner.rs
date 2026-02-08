@@ -227,9 +227,9 @@ impl RuversiRunner {
                 Some(cap) => {
                     // cap[1] : val, cap[2] : rfen
                     Some((
-                        bitboard::BitBoard::from(&cap[2]).unwrap(),
+                        bitboard::BitBoard::from(&cap[2]).ok()?,
                         0, 0,
-                        cap[1].parse::<f32>().unwrap() as i8
+                        cap[1].parse::<f32>().ok()? as i8
                     ))
                 },
                 _ => {None}
