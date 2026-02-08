@@ -248,7 +248,7 @@ fn test_ruversirunner_default_values() {
     assert_eq!(rr.curdir, "../ruversi");
     assert_eq!(rr.path, "./target/release/ruversi");
     assert_eq!(rr.evfile, "data/evaltable.txt");
-    assert!(rr.verbose);
+    assert!(!rr.verbose);
 }
 
 #[test]
