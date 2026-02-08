@@ -589,7 +589,9 @@ impl Training {
             panic!("{dest_file} exists!");
         }
 
-        if n == 3 {
+        // const RELY_ON_RUVERSI : bool = true;
+        const RELY_ON_RUVERSI : bool = false;
+        if RELY_ON_RUVERSI && n == 3 {
             return self.extract_mate3();
         }
 
