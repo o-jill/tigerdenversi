@@ -91,38 +91,6 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize,
     boards
 }
 
-pub fn loadkifu_for_mate(files : &[String], d : &str, mate : u32,
-        log : &mut std::fs::File, show_path : bool)
-        -> Vec<(bitboard::BitBoard, i8, i8, i8)> {
-    // let sta = std::time::Instant::now();
-    let shared = std::sync::Mutex::new(log);
-    let boards = files.par_iter().flat_map(|fname| {
-        let path = format!("{d}/{fname}");
-        {
-            let mut l = shared.lock().unwrap();
-            l.write_all(format!("{path}\n").as_bytes()).unwrap();
-            if show_path {print!("{path}\r");}
-        }
-        let content = std::fs::read_to_string(&path).unwrap();
-        let lines: Vec<&str> = content.split('\n').collect();
-        let kifu = kifu::Kifu::from(&lines);
-        kifu.list.iter().filter_map(|t| {
-            let ban = bitboard::BitBoard::from(&t.rfen).unwrap();
-            // 指定の局面じゃない
-            if ban.is_last_n(mate) {
-                let score = ban.count();
-                let (fsb, fsw) = ban.fixedstones();
-                Some((ban, fsb, fsw, score))
-            } else {
-                None
-            }
-        }).collect::<Vec<_>>()
-    }).collect();
-    if show_path {println!();}
-    // println!("{}usec",sta.elapsed().as_micros());
-    boards
-}
-
 fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
         -> Result<Vec<(bitboard::BitBoard, i8, i8, i8)>, String> {
     let mut ret = Vec::new();
