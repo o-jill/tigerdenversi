@@ -215,16 +215,18 @@ impl Training {
             ).collect();
 
         if !self.matefiles.is_empty() {
-            let mut mates = self.matefiles.split(",").flat_map(|path|
-                match data_loader::load_mates(path, progress) {
-                    Ok(arr) => {arr},
-                    Err(msg) => {panic!("{msg}")},
+            let mut mates = self.matefiles.split(",").flat_map(
+                |path| {
+                    if let Some(pb) = pb {pb.inc(1);}
+                    match data_loader::load_mates(path, progress) {
+                        Ok(arr) => {arr},
+                        Err(msg) => {panic!("{msg}")},
+                    }
                 }
             ).collect::<Vec<_>>();
             self.putlog(&format!("mates : {} size:{}", self.matefiles, mates.len()));
             if !mates.is_empty() {boards.append(&mut mates);}
         }
-        if let Some(pb) = pb {pb.inc(1);}
 
         data_loader::dedupboards(&mut boards, &mut self.log, pb.is_none());
         boards.shuffle(&mut rand::thread_rng());
@@ -500,9 +502,14 @@ impl Training {
             }
             let pbchild = if self.show_progressbar {
                 let pb = self.multibar.add(
-                ProgressBar::new(
-                    self.kifudir.chars().fold(7,
-                        |acc, c| if c == ',' {acc + 1} else {acc})));
+                    ProgressBar::new(
+                        {
+                            let steps = self.kifudir.chars().fold(7,
+                                |acc, c| if c == ',' {acc + 1} else {acc});
+                            self.matefiles.chars().fold(steps,
+                                |acc, c| if c == ',' {acc + 1} else {acc})
+                            }
+                        ));
                 pb.set_style(
                     ProgressStyle::with_template(
                         "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
