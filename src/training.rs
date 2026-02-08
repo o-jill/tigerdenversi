@@ -641,11 +641,11 @@ impl Training {
             } else {
                 None
             };
+            let rr = ruversirunner::RuversiRunner::from_config(
+                &std::path::PathBuf::from(
+                    self.ruversi_config.clone())).unwrap();
             let mut mates = boards.iter().flat_map(|(ban, _, _, _)| {
                 if !ban.is_last_n(n) {panic!("!ban.is_last_n({n})");}
-                let rr = ruversirunner::RuversiRunner::from_config(
-                    &std::path::PathBuf::from(
-                        self.ruversi_config.clone())).unwrap();
                 // rr.set_verbose(true);
                 match rr.run_children(&ban.to_string()) {
                     Err(msg) => {panic!("{msg}")},
