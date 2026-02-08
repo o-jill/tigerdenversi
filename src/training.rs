@@ -383,7 +383,7 @@ impl Training {
             self.loss_curve.push(testloss);
             self.update(testloss, &pb, ep + self.warmup, elapsed);
             // 学習を始めたけどロスが大きいときはなにかおかしい
-            if ep > self.warmup + 5 {
+            if ep >  5 {
                 // 少なくとも300を超えてるときはおかしい
                 const WARNING_THRESHOLD : f64 = 300f64;
                 if testloss > WARNING_THRESHOLD {
