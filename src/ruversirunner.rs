@@ -223,7 +223,7 @@ impl RuversiRunner {
         // val,-1.13,8/8/8/3aA3/3B3/4A3/8/8 w,1262 nodes. f4D3e7F3e3F6d6
         let scoreptn = regex::Regex::new("val,([-0-9.]+),([0-8A-Ha-h\\/]+ [bw]),").unwrap();
         let ret = lines.iter().filter_map(|line| {
-            let ret = match scoreptn.captures(&line) {
+            match scoreptn.captures(&line) {
                 Some(cap) => {
                     // cap[1] : val, cap[2] : rfen
                     Some((
@@ -233,8 +233,7 @@ impl RuversiRunner {
                     ))
                 },
                 _ => {None}
-            };
-            ret
+            }
         }).collect::<Vec<_>>();
 
         Ok(ret)
