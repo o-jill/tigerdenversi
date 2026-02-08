@@ -212,17 +212,17 @@ impl RuversiRunner {
             return Err(format!("invalid input {lines:?}"));
         }
 
+        // "val,{val:.2},{newban},{node}";
+        // ex.
+        // |__|__|__|__|__|__|__|__|  <-- 不要
+        // @@'s turn.  <-- 不要
+        // val:-0.3012 2185 nodes. D3c5D6e3F4c6F5 7msec  <-- 不要
+        // val,-1.62,8/8/3A4/3B3/3Aa3/8/8/8 w,1769 nodes. c3C4c5B4d2C2a3
+        // val,-1.62,8/8/8/2C3/3Aa3/8/8/8 w,507 nodes. c3D3
+        // val,-1.50,8/8/8/3aA3/3C2/8/8/8 w,2357 nodes. d6C4f4C5f6G5d3
+        // val,-1.13,8/8/8/3aA3/3B3/4A3/8/8 w,1262 nodes. f4D3e7F3e3F6d6
+        let scoreptn = regex::Regex::new("val,([-0-9.]+),([0-8A-Ha-h\\/]+ [bw]),").unwrap();
         let ret = lines.iter().filter_map(|line| {
-            // "val,{val:.2},{newban},{node}";
-            // ex.
-            // |__|__|__|__|__|__|__|__|  <-- 不要
-            // @@'s turn.  <-- 不要
-            // val:-0.3012 2185 nodes. D3c5D6e3F4c6F5 7msec  <-- 不要
-            // val,-1.62,8/8/3A4/3B3/3Aa3/8/8/8 w,1769 nodes. c3C4c5B4d2C2a3
-            // val,-1.62,8/8/8/2C3/3Aa3/8/8/8 w,507 nodes. c3D3
-            // val,-1.50,8/8/8/3aA3/3C2/8/8/8 w,2357 nodes. d6C4f4C5f6G5d3
-            // val,-1.13,8/8/8/3aA3/3B3/4A3/8/8 w,1262 nodes. f4D3e7F3e3F6d6
-            let scoreptn = regex::Regex::new("val,([-0-9.]+),([0-8A-Ha-h\\/]+ [bw]),").unwrap();
             let ret = match scoreptn.captures(&line) {
                 Some(cap) => {
                     // cap[1] : val, cap[2] : rfen
