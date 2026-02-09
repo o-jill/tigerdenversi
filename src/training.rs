@@ -58,7 +58,7 @@ impl From<argument::Arg> for Training {
 
         let partlist = Self::partlist(&arg.part);
         let kifudir = arg.kifudir.unwrap_or("kifu".to_string()).clone();
-        let matefiles = arg.mate_file.unwrap_or(String::new()).clone();
+        let matefiles = arg.mate_file.unwrap_or_default();
         let devtype = arg.device.unwrap_or("cpu".to_string());
         let devtype = devtype.clone();
         let device    = if devtype == "mps" && tch::utils::has_mps() {
