@@ -503,10 +503,13 @@ impl Training {
                         {
                             let steps = self.kifudir.chars().fold(7,
                                 |acc, c| if c == ',' {acc + 1} else {acc});
-                            self.matefiles.chars().fold(steps,
+                            if self.matefiles.is_empty() {
+                                steps
+                            } else {
+                                self.matefiles.chars().fold(steps + 1,
                                 |acc, c| if c == ',' {acc + 1} else {acc})
                             }
-                        ));
+                        }));
                 pb.set_style(
                     ProgressStyle::with_template(
                         "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
