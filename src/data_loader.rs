@@ -125,25 +125,18 @@ pub fn load_mates(path : &str, progress : usize)
     if !filepath.exists() {return Err(format!("{path} does NOT exist!"));}
 
     if path.ends_with(".zst") || path.ends_with(".zstd") {
-        let f = std::fs::File::open(path);
-        if let Err(e) = f {
-            return Err(format!("error: {e} @ File::open"));
-        }
-        let z = zstd::Decoder::new(f.unwrap());
-        if let Err(e) = z {
-            return Err(format!("error: {e} @ zstd::Decoder::new"));
-        }
+        let f = std::fs::File::open(path)
+            .map_err(|e| format!("error: {e} @ File::open"))?;
+        let z = zstd::Decoder::new(f)
+            .map_err(|e| format!("error: {e} @ zstd::Decoder::new"))?;
 
-        let buf = std::io::BufReader::new(z.unwrap());
+        let buf = std::io::BufReader::new(z);
         let ret = read_mate_file(buf, progress)?;
         Ok(ret)
     } else {
-        let f = std::fs::File::open(path);
-        if let Err(e) = f {
-            return Err(format!("{e}"));
-        }
+        let f = std::fs::File::open(path).map_err(|e| format!("{e}"))?;
 
-        let buf = std::io::BufReader::new(f.unwrap());
+        let buf = std::io::BufReader::new(f);
         let ret = read_mate_file(buf, progress)?;
         Ok(ret)
     }
