@@ -12,9 +12,9 @@ mod data_loader;
 mod neuralnet;
 mod training;
 
-
 fn main() -> Result<(), tch::TchError> {
     let arg = argument::Arg::parse();
+
     let mut train = training::Training::from(arg);
 
     train.run()?;

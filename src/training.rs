@@ -1,9 +1,8 @@
 use super::*;
 use chrono::Utc;
-use std::io::Write;
 use std::time::Duration;
 use tch::nn::{self, OptimizerConfig, VarStore};
-use tch::{Device, data::Iter2, Tensor};
+use tch::{Device, data::Iter2, Kind, Tensor};
 use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
@@ -12,6 +11,7 @@ const MIN_COSANEAL : f64 = 1e-4;
 pub struct Training {
     trainingpart : Vec<bool>,
     kifudir : String,
+    matefiles : String,
     devtype : String,
     device : tch::Device,
     autostop : Option<f64>,
@@ -58,6 +58,7 @@ impl From<argument::Arg> for Training {
 
         let partlist = Self::partlist(&arg.part);
         let kifudir = arg.kifudir.unwrap_or("kifu".to_string()).clone();
+        let matefiles = arg.mate_file.unwrap_or_default();
         let devtype = arg.device.unwrap_or("cpu".to_string());
         let devtype = devtype.clone();
         let device    = if devtype == "mps" && tch::utils::has_mps() {
@@ -80,6 +81,7 @@ impl From<argument::Arg> for Training {
         Self {
             trainingpart : partlist,
             kifudir,
+            matefiles,
             devtype,
             device,
             autostop : arg.autostop,
@@ -201,13 +203,27 @@ impl Training {
     fn prepare_data(&mut self, progress : usize, pb : &Option<ProgressBar>)
             -> (tch::Tensor, tch::Tensor) {
         // let sta = std::time::Instant::now();
-        let mut boards = self.kifudir.split(",").flat_map(
+        let mut boards : Vec<_> = self.kifudir.split(",").flat_map(
             |d| {
                 if let Some(pb) = pb {pb.inc(1);}
                 data_loader::loadkifu(
                     &data_loader::findfiles(&format!("./{d}")),
                     d, progress, &mut self.log, pb.is_none())}
             ).collect();
+
+        if !self.matefiles.is_empty() {
+            let mut mates = self.matefiles.split(",").flat_map(
+                |path| {
+                    if let Some(pb) = pb {pb.inc(1);}
+                    match data_loader::load_mates(path, progress) {
+                        Ok(arr) => {arr},
+                        Err(msg) => {panic!("{msg}")},
+                    }
+                }
+            ).collect::<Vec<_>>();
+            self.putlog(&format!("mates : {} size:{}", self.matefiles, mates.len()));
+            if !mates.is_empty() {boards.append(&mut mates);}
+        }
 
         data_loader::dedupboards(&mut boards, &mut self.log, pb.is_none());
         boards.shuffle(&mut rand::thread_rng());
@@ -365,6 +381,23 @@ impl Training {
             final_loss = testloss;
             self.loss_curve.push(testloss);
             self.update(testloss, &pb, ep + self.warmup, elapsed);
+            // 学習を始めたけどロスが大きいときはなにかおかしい
+            if ep >  5 {
+                // 少なくとも300を超えてるときはおかしい
+                const WARNING_THRESHOLD : f64 = 300f64;
+                if testloss > WARNING_THRESHOLD {
+                    let msg = format!("loss:{testloss}, ep:{ep}, lr:{new_lr}");
+                    eprintln!("{msg}");
+                    self.putlog(&msg);
+                    let msg = format!(
+                        "ep: {ep} iloss: {iloss} input_mean: {:.3} target_mean: {:.3}",
+                        inputs[iloss].mean(Kind::Float).double_value(&[]),
+                        targets[iloss].mean(Kind::Float).double_value(&[]));
+                    eprintln!("{msg}");
+                    self.putlog(&msg);
+                    panic!("{msg}");
+                }
+            }
 
             if self.autostop.is_none() {continue;}
 
@@ -466,9 +499,17 @@ impl Training {
             }
             let pbchild = if self.show_progressbar {
                 let pb = self.multibar.add(
-                ProgressBar::new(
-                    self.kifudir.chars().fold(6,
-                        |acc, c| if c == ',' {acc + 1} else {acc})));
+                    ProgressBar::new(
+                        {
+                            let steps = self.kifudir.chars().fold(7,
+                                |acc, c| if c == ',' {acc + 1} else {acc});
+                            if self.matefiles.is_empty() {
+                                steps
+                            } else {
+                                self.matefiles.chars().fold(steps + 1,
+                                |acc, c| if c == ',' {acc + 1} else {acc})
+                            }
+                        }));
                 pb.set_style(
                     ProgressStyle::with_template(
                         "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()

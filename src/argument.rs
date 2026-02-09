@@ -55,4 +55,7 @@ pub struct Arg {
     /// show ascii graph
     #[arg(long, default_value_t = false)]
     pub graph : bool,
+    /// paths of files which contains mate boards.
+    #[arg(long)]
+    pub mate_file : Option<String>,
 }
