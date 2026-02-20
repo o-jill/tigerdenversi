@@ -645,25 +645,25 @@ fn test_partlist() {
 
     let s1 = Some(String::new());
     let p1 = Training::partlist(&s1);
-    assert_eq!(p1, vec![true, true, true]);
+    assert_eq!(p1, vec![true, true, true, true, true, true]);
 
     let s2 = Some(String::from("1,,0"));
     let p2 = Training::partlist(&s2);
-    assert_eq!(p2, vec![true, false, false]);
+    assert_eq!(p2, vec![true, false, false, true, true, true]);
 
-    let s3 = Some(String::from("-1,false,zero"));
+    let s3 = Some(String::from("-1,false,zero,no,none,off"));
     let p3 = Training::partlist(&s3);
-    assert_eq!(p3, vec![true, false, false]);
+    assert_eq!(p3, vec![true, false, false, false, false, false]);
 
-    let s4 = Some(String::from("no,none,off"));
-    let p4 = Training::partlist(&s4);
-    assert_eq!(p4, vec![false, false, false]);
+    // let s4 = Some(String::from("no,none,off"));
+    // let p4 = Training::partlist(&s4);
+    // assert_eq!(p4, vec![false, false, false]);
 
     let s5 = Some(String::from("no,none,a,0"));
     let p5 = Training::partlist(&s5);
-    assert_eq!(p5, vec![false, false, true]);
+    assert_eq!(p5, vec![false, false, true, false, true, true]);
 
     let s6 = Some(String::from("0,"));
     let p6 = Training::partlist(&s6);
-    assert_eq!(p6, vec![false, false, true]);
+    assert_eq!(p6, vec![false, false, true, true, true, true]);
 }
