@@ -26,7 +26,7 @@ pub fn findfiles(kifupath : &str) -> Vec<String> {
 
 pub fn loadkifu(files : &[String], d : &str, progress : usize,
         log : &mut std::fs::File, show_path : bool)
-        -> Vec<(bitboard::BitBoard, i8, i8, i8)> {
+            -> Vec<(bitboard::BitBoard, i8)> {
     // let sta = std::time::Instant::now();
     let shared = std::sync::Mutex::new(log);
     let boards = files.par_iter().flat_map(|fname| {
@@ -46,9 +46,8 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize,
                 return None;
             }
 
-            let (fsb, fsw) = ban.fixedstones();
             let score = kifu.score.unwrap();
-            let mut ret = ban.rotated_mirrored(fsb, fsw, score);
+            let mut ret = ban.rotated_mirrored(score);
 
             if !cfg!(feature = "extract_mate3") {return Some(ret);}
 
@@ -80,7 +79,7 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize,
                 if scores.is_empty() {panic!("scores.is_empty()");}
 
                 let score = *scores.iter().reduce(|a, b| a.max(b)).unwrap();
-                let mut aug = newban.rotated_mirrored(fsb, fsw, score);
+                let mut aug = newban.rotated_mirrored(score);
                 ret.append(&mut aug);
             }
             Some(ret)
@@ -92,7 +91,7 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize,
 }
 
 fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
-        -> Result<Vec<(bitboard::BitBoard, i8, i8, i8)>, String> {
+        -> Result<Vec<(bitboard::BitBoard, i8)>, String> {
     let mut ret = Vec::new();
 
     for line in buf.lines() {
@@ -108,10 +107,12 @@ fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
 
                 let (b, w) = ban.fixedstones();
                 let score = match elem[1].parse::<i8>() {
-                    Err(msg) => {return Err(format!("error: parse score : {msg}"));},
+                    Err(msg) => {
+                        return Err(format!("error: parse score : {msg}"));
+                    },
                     Ok(num) => {num},
                 };
-                ret.push((ban, b, w, score));
+                ret.push((ban, score));
             }
         }
     }
@@ -120,7 +121,7 @@ fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
 }
 
 pub fn load_mates(path : &str, progress : usize)
-        -> Result<Vec<(bitboard::BitBoard, i8, i8, i8)>, String> {
+        -> Result<Vec<(bitboard::BitBoard, i8)>, String> {
     let filepath = std::path::Path::new(path);
     if !filepath.exists() {return Err(format!("{path} does NOT exist!"));}
 
@@ -131,18 +132,16 @@ pub fn load_mates(path : &str, progress : usize)
             .map_err(|e| format!("error: {e} @ zstd::Decoder::new"))?;
 
         let buf = std::io::BufReader::new(z);
-        let ret = read_mate_file(buf, progress)?;
-        Ok(ret)
+        read_mate_file(buf, progress)
     } else {
         let f = std::fs::File::open(path).map_err(|e| format!("{e}"))?;
 
         let buf = std::io::BufReader::new(f);
-        let ret = read_mate_file(buf, progress)?;
-        Ok(ret)
+        read_mate_file(buf, progress)
     }
 }
 
-pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8, i8, i8)>,
+pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8)>,
                    log : &mut std::fs::File, show_path : bool) {
     // println!("board: {} boards", boards.len());
     // let sta = std::time::Instant::now();
@@ -157,7 +156,7 @@ pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8, i8, i8)>,
 }
 
 #[cfg(feature = "fixed_stones")]
-pub fn extractboards(boards : &[(bitboard::BitBoard, i8, i8, i8)])
+pub fn extractboards(boards : &[(bitboard::BitBoard, i8)])
         -> Vec<f32> {
     boards.iter().map(|(b, fb, fw, _s)| {
         let mut v = [0.0f32 ; INPUTSIZE as usize];
@@ -175,23 +174,22 @@ pub fn extractboards(boards : &[(bitboard::BitBoard, i8, i8, i8)])
 }
 
 #[cfg(not(feature = "fixed_stones"))]
-pub fn extractboards(boards : &[(bitboard::BitBoard, i8, i8, i8)])
+pub fn extractboards(boards : &[(bitboard::BitBoard, i8)])
         -> Vec<f32> {
-    boards.iter().map(|(b, _fb, _fw, _s)| {
+    boards.iter().map(|(b, _s)| {
         let mut v = [0.0f32 ; INPUTSIZE as usize];
         for y in 0..8 {
             for x in 0..8 {
-                v[x + bitboard::NUMCELL * y + weight::N_INPUT_BLACK] = b.black_at(x, y);
-                v[x + bitboard::NUMCELL * y + weight::N_INPUT_WHITE] = b.white_at(x, y);
+                v[x + bitboard::NUMCELL * y] = b.black_at(x, y);
+                v[x + bitboard::NUMCELL * y + weight::N_INPUT_BLACK] = b.white_at(x, y);
             }
         }
-        v[weight::N_INPUT_TEBAN] = b.teban as f32;
         v
     }).collect::<Vec<[f32 ; INPUTSIZE as usize]>>().concat()
 }
 
-pub fn extractscore(boards : &[(bitboard::BitBoard, i8, i8, i8)]) -> Vec<f32> {
-    boards.iter().map(|(_b, _fb, _fw, s)| *s as f32).collect::<Vec<f32>>()
+pub fn extractscore(boards : &[(bitboard::BitBoard, i8)]) -> Vec<f32> {
+    boards.iter().map(|(_b, s)| *s as f32).collect::<Vec<f32>>()
 }
 
 #[test]
@@ -201,9 +199,8 @@ fn test_extract_boards() {
         ("Ag/Ga/Bf/Fb/Ce/Ec/Dd/dD b",-2i8)
     ].iter().map(|(rfen, result)| {
         let ban = bitboard::BitBoard::from(rfen).unwrap();
-        let  (fb, fw) = ban.fixedstones();
-        (ban, fb, fw, *result)
-    }).collect::<Vec<(bitboard::BitBoard, i8, i8, i8)>>();
+        (ban, *result)
+    }).collect::<Vec<(bitboard::BitBoard, i8)>>();
     let convert = extractboards(&input);
     let answer = vec![
         // 8/8/8/3Aa3/3aA3/8/8/8 b"
@@ -223,7 +220,6 @@ fn test_extract_boards() {
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
-        1f32,  // 0f32, 0f32,
         // "h/h/h/h/H/H/H/H w"
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
@@ -241,7 +237,6 @@ fn test_extract_boards() {
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         0f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
-        -1f32,  // 32f32, 32f32,
         // "Ag/Ga/Bf/Fb/Ce/Ec/Dd/dD b"
         1f32,0f32,0f32,0f32,0f32,0f32,0f32,0f32,
         1f32,1f32,1f32,1f32,1f32,1f32,1f32,0f32,
@@ -259,7 +254,6 @@ fn test_extract_boards() {
         0f32,0f32,0f32,0f32,0f32,1f32,1f32,1f32,
         0f32,0f32,0f32,0f32,1f32,1f32,1f32,1f32,
         1f32,1f32,1f32,1f32,0f32,0f32,0f32,0f32,
-        1f32,  // 11f32,17f32,
     ];
 
     assert_eq!(convert, answer);
