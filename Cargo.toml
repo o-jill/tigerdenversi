@@ -1,6 +1,6 @@
 [package]
 name = "tigerdenversi"
-version = "0.6.2"
+version = "0.7.0"
 edition = "2021"
 description = "training program for ruversi."
 
@@ -18,6 +18,5 @@ tch = {version = "0.18", features = ["download-libtorch"]}
 zstd = "0.13.3"
 
 [features]
-fixed_stones = []
 nosimd = []
 extract_mate3 = []
