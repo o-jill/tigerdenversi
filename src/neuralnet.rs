@@ -50,8 +50,6 @@ pub fn load(vs : &mut VarStore, weights_org : &weight::Weight, progress : usize)
     const INPSIZE : usize = INPUTSIZE as usize;
     const HIDSIZE : usize = HIDDENSIZE as usize;
     let wban = weights_org.wban(progress);
-    let wtbn = weights_org.wteban(progress);
-    let wfs = weights_org.wfixedstones(progress);
     let wdc = weights_org.wibias(progress);
     let whdn = weights_org.wlayer1(progress);
     let wdc2 = weights_org.wl1bias(progress);
@@ -64,11 +62,6 @@ pub fn load(vs : &mut VarStore, weights_org : &weight::Weight, progress : usize)
         let wsz = bitboard::CELL_2D * 2;
         weights[i * INPSIZE..i * INPSIZE + wsz].copy_from_slice(
             &wban[i * wsz .. (i + 1) * wsz]);
-        weights[i * INPSIZE + wsz] = wtbn[i];
-        if cfg!(feature = "fixed_stones") {
-            weights[i * INPSIZE + wsz + 1] = wfs[i];
-            weights[i * INPSIZE + wsz + 2] = wfs[i + HIDSIZE];
-        }
     }
     let wl1 = Tensor::from_slice(&weights).view((HIDDENSIZE, INPUTSIZE));
     neuralnet::loadtensor(vs, "layer1.weight", &wl1);
@@ -124,11 +117,6 @@ pub fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress :
         let offset = i * INPUTSIZE as usize;
         outp[offset_out..offset_out + wsz].copy_from_slice(
             &tmp[offset..offset + wsz]);
-        outp[weight::N_WEIGHT_TEBAN + i] = tmp[wsz + offset];
-        #[cfg(feature = "fixed_stones")] {
-        outp[weight::N_WEIGHT_FIXED_B + i] = tmp[wsz + 1 + offset];
-        outp[weight::N_WEIGHT_FIXED_W + i] = tmp[wsz + 2 + offset];
-        }
     }
 
     let keys = [
