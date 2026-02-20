@@ -7,37 +7,24 @@ use std::{fs, io::{BufReader, BufRead}};
  * hidden: 8 + 1
  * output: 1
  */
-pub const N_INPUT_BLACK : usize = 0;
+pub const N_INPUT_BLACK : usize = bitboard::CELL_2D;
 pub const N_INPUT_WHITE : usize = N_INPUT_BLACK + bitboard::CELL_2D;
-pub const N_INPUT_TEBAN : usize = N_INPUT_WHITE + bitboard::CELL_2D;
-#[cfg(feature = "fixed_stones")]
-pub const N_INPUT_FB : usize = N_INPUT_TEBAN + 1;
-#[cfg(feature = "fixed_stones")]
-pub const N_INPUT_FW : usize = N_INPUT_FB + 1;
-#[cfg(not(feature = "fixed_stones"))]
-pub const N_INPUT_FW : usize = N_INPUT_TEBAN;
-
-pub const N_INPUT : usize = N_INPUT_FW + 1;
+pub const N_INPUT : usize = N_INPUT_WHITE;
 
 pub const N_HIDDEN : usize = 128;
 pub const N_HIDDEN2 : usize = 16;
 const N_OUTPUT : usize = 1;
-pub const N_WEIGHT_TEBAN : usize = N_INPUT_TEBAN * N_HIDDEN;
-#[cfg(feature = "fixed_stones")]
-pub const N_WEIGHT_FIXED_B : usize = N_WEIGHT_TEBAN + N_HIDDEN;
-#[cfg(feature = "fixed_stones")]
-pub const N_WEIGHT_FIXED_W : usize = N_WEIGHT_FIXED_B + N_HIDDEN;
-#[cfg(not(feature = "fixed_stones"))]
-pub const N_WEIGHT_FIXED_W : usize = N_WEIGHT_TEBAN;
-pub const N_WEIGHT_INPUTBIAS : usize = N_WEIGHT_FIXED_W + N_HIDDEN;
+
+const N_WEIGHT_INPUT : usize = 0; // N_INPUT_WHITE * N_HIDDEN;
+pub const N_WEIGHT_INPUTBIAS : usize =
+        N_WEIGHT_INPUT + N_INPUT_WHITE * N_HIDDEN;
 pub const N_WEIGHT_LAYER1 : usize = N_WEIGHT_INPUTBIAS + N_HIDDEN;
 pub const N_WEIGHT_LAYER1BIAS : usize = N_WEIGHT_LAYER1 + N_HIDDEN * N_HIDDEN2;
 pub const N_WEIGHT_LAYER2 : usize = N_WEIGHT_LAYER1BIAS + N_HIDDEN2;
 const N_WEIGHT_LAYER2BIAS : usize = N_WEIGHT_LAYER2 + N_HIDDEN2;
-pub const N_WEIGHT : usize =
-  (N_INPUT + 1) * N_HIDDEN + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
+pub const N_WEIGHT : usize = N_WEIGHT_LAYER2BIAS + 1;
 
-pub const N_PROGRESS_DIV : usize = 3;
+pub const N_PROGRESS_DIV : usize = 6;
 
 #[allow(dead_code)]
 const WSZV1 : usize = (bitboard::CELL_2D + 1 + 1) * 4 + 4 + 1;
@@ -65,6 +52,8 @@ const WSZV10 : usize = (bitboard::CELL_2D * 2 + 1 + 2 + 1) * N_HIDDEN
         + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
 const WSZV11 : usize = (bitboard::CELL_2D * 2 + 1 + 1) * N_HIDDEN
         + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
+const WSZV12 : usize = (bitboard::CELL_2D * 2 + 1) * N_HIDDEN
+        + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
 
 // v2
 // 8/8/1A6/2Ab3/2C3/8/8/8 w
@@ -86,6 +75,7 @@ pub enum EvalFile{
     V9,
     V10,
     V11,
+    V12,
 }
 
 impl EvalFile {
@@ -103,6 +93,7 @@ impl EvalFile {
             EvalFile::V9 => {"# 3x 64+1+2-128-16-1"},
             EvalFile::V10 => {"# 3x 128+1+2-128-16-1"},
             EvalFile::V11 => {"# 3x 128+1-128-16-1"},
+            EvalFile::V12 => {"# 6x 128-128-16-1"},
         }
     }
 
@@ -119,6 +110,7 @@ impl EvalFile {
             "# 3x 64+1+2-128-16-1" => Some(EvalFile::V9),
             "# 3x 128+1+2-128-16-1" => Some(EvalFile::V10),
             "# 3x 128+1-128-16-1" => Some(EvalFile::V11),
+            "# 6x 128-128-16-1" => Some(EvalFile::V12),
             _ => None
         }
     }
@@ -129,7 +121,7 @@ impl EvalFile {
             format!("# {N_PROGRESS_DIV}x 128+1+2-{N_HIDDEN}-{N_HIDDEN2}-1")
         }
         #[cfg(not(feature = "fixed_stones"))] {
-            format!("# {N_PROGRESS_DIV}x 128+1-{N_HIDDEN}-{N_HIDDEN2}-1")
+            format!("# {N_PROGRESS_DIV}x 128-{N_HIDDEN}-{N_HIDDEN2}-1")
         }
     }
 }
@@ -191,37 +183,7 @@ impl Weight {
     }
 
     pub fn wban(&self, progress : usize) -> &[f32] {
-        &self.weight[progress][..N_WEIGHT_TEBAN]
-    }
-
-    pub fn wteban(&self, progress : usize) -> &[f32] {
-        #[cfg(feature = "fixed_stones")] {
-        &self.weight[progress][N_WEIGHT_TEBAN..N_WEIGHT_FIXED_W]
-        }
-        #[cfg(not(feature = "fixed_stones"))] {
-            &self.weight[progress][N_WEIGHT_TEBAN..N_WEIGHT_INPUTBIAS]
-        }
-    }
-
-    pub fn wfixedstones(&self, progress : usize) -> &[f32] {
-        #[cfg(feature = "fixed_stones")]{
-            &self.weight[progress][N_WEIGHT_FIXED_B..N_WEIGHT_INPUTBIAS]
-        }
-        #[cfg(not(feature = "fixed_stones"))] {
-            &self.weight[progress][..N_WEIGHT_INPUTBIAS]
-        }
-    }
-
-    #[allow(dead_code)]
-    #[cfg(feature = "fixed_stones")]
-    pub fn wfixedstone_b(&self, progress : usize) -> &[f32] {
-        &self.weight[progress][N_WEIGHT_FIXED_B..N_WEIGHT_FIXED_W]
-    }
-
-    #[allow(dead_code)]
-    #[cfg(feature = "fixed_stones")]
-    pub fn wfixedstone_w(&self, progress : usize) -> &[f32] {
-        &self.weight[progress][N_WEIGHT_FIXED_W..N_WEIGHT_INPUTBIAS]
+        &self.weight[progress][..N_WEIGHT_INPUTBIAS]
     }
 
     pub fn wibias(&self, progress : usize) -> &[f32] {
@@ -298,6 +260,11 @@ impl Weight {
                             idx += 1;
                             if idx >= N_PROGRESS_DIV {return Ok(());}
                         },
+                        EvalFile::V12 => {
+                            self.readv12(&l, idx)?;
+                            idx += 1;
+                            if idx >= N_PROGRESS_DIV {return Ok(());}
+                        },
                         _ => {}
                     }
                 },
@@ -368,6 +335,10 @@ impl Weight {
         Ok(())
     }
 
+    fn readv12(&mut self, _line : &str, _progress : usize) -> Result<(), String> {
+        Err(String::from("v9 format is not supported any more."))
+    }
+
     #[allow(dead_code)]
     pub fn writev9(&self, path : &str) ->Result<(), std::io::Error> {
         // header
@@ -418,8 +389,11 @@ impl Weight {
 #[test]
 fn test_weight() {
     let weight = Weight::default();
-    assert_eq!(weight.weight.len(), 3);
+    assert_eq!(weight.weight.len(), 6);
     assert_eq!(weight.weight[0].len(), N_WEIGHT);
     assert_eq!(weight.weight[1].len(), N_WEIGHT);
     assert_eq!(weight.weight[2].len(), N_WEIGHT);
+    assert_eq!(weight.weight[3].len(), N_WEIGHT);
+    assert_eq!(weight.weight[4].len(), N_WEIGHT);
+    assert_eq!(weight.weight[5].len(), N_WEIGHT);
 }
