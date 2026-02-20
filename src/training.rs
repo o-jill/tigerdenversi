@@ -51,6 +51,10 @@ impl From<argument::Arg> for Training {
                 String::from("/dev/null")
             }
         }.replace("<DATETIME>", &strdt);
+        let invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+        if path.chars().any(|c| invalid_chars.contains(&c)) {
+            panic!("path:{path} contains invalid letter!");
+        }
         let mut log = match std::fs::File::create(path) {
         Ok(f) => {f},
         Err(e) => {panic!("{e}")},
