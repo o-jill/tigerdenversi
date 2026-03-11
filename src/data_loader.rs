@@ -40,7 +40,7 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize,
         let lines: Vec<&str> = content.split('\n').collect();
         let kifu = kifu::Kifu::from(&lines);
         kifu.list.par_iter().filter_map(|t| {
-            let ban = bitboard::BitBoard::from(&t.rfen).unwrap();
+            let ban = bitboard::BitBoard::try_from(t.rfen.as_str()).unwrap();
             // 最後の局面とか後一手の局面とか覚えたい進行度の時じゃない
             if ban.is_last1_or_full() || !ban.is_progress(progress) {
                 return None;
@@ -102,17 +102,22 @@ fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
                 if l.len() < 11 || l.starts_with("#") {continue;}
                 // rfen,score
                 let elem : Vec<&str> = l.split(",").collect();
-                let ban = bitboard::BitBoard::from(elem[0])?;
+                let ban = bitboard::BitBoard::try_from(elem[0])?;
                 if !ban.is_progress(progress) {continue;}
 
-                let (b, w) = ban.fixedstones();
+                // let (b, w) = ban.fixedstones();
                 let score = match elem[1].parse::<i8>() {
                     Err(msg) => {
                         return Err(format!("error: parse score : {msg}"));
                     },
                     Ok(num) => {num},
                 };
-                ret.push((ban, score));
+                const AUGMENTATION_READ_MATE : bool = true;
+                if AUGMENTATION_READ_MATE {
+                    ret.append(&mut ban.rotated_mirrored(score));
+                } else {
+                    ret.push((ban, score));
+                }
             }
         }
     }
@@ -198,7 +203,7 @@ fn test_extract_boards() {
         ("8/8/8/3Aa3/3aA3/8/8/8 b", 10i8), ("h/h/h/h/H/H/H/H w", 3i8),
         ("Ag/Ga/Bf/Fb/Ce/Ec/Dd/dD b",-2i8)
     ].iter().map(|(rfen, result)| {
-        let ban = bitboard::BitBoard::from(rfen).unwrap();
+        let ban = bitboard::BitBoard::try_from(*rfen).unwrap();
         (ban, *result)
     }).collect::<Vec<(bitboard::BitBoard, i8)>>();
     let convert = extractboards(&input);
