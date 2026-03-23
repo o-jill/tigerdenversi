@@ -13,8 +13,8 @@ pub struct Arg {
     #[arg(long, default_value_t = 100)]
     pub epoch : usize,
     /// kifu directory
-    #[arg(long)]
-    pub kifudir : Option<String>,
+    #[arg(long, value_delimiter=',')]
+    pub kifudir : Vec<String>,
     /// mate file directory
     #[arg(long, value_delimiter=',')]
     pub matedir : Vec<String>,

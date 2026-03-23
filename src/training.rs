@@ -10,7 +10,7 @@ const MIN_COSANEAL : f64 = 1e-4;
 
 pub struct Training {
     trainingpart : Vec<bool>,
-    kifudir : String,
+    kifudir : Vec<String>,
     matedir : Vec<String>,
     matefiles : String,
     devtype : String,
@@ -62,7 +62,11 @@ impl From<argument::Arg> for Training {
         };
 
         let partlist = Self::partlist(&arg.part);
-        let kifudir = arg.kifudir.unwrap_or("kifu".to_string()).clone();
+        let kifudir = if arg.kifudir.is_empty() {
+                vec![String::from("kifu") ; 1]
+            } else {
+                arg.kifudir
+            };
         let matedir = arg.matedir;
         let matefiles = arg.mate_file.unwrap_or_default();
         let devtype = arg.device.unwrap_or("cpu".to_string());
@@ -210,7 +214,7 @@ impl Training {
     fn prepare_data(&mut self, progress : usize, pb : &Option<ProgressBar>)
             -> (tch::Tensor, tch::Tensor) {
         // let sta = std::time::Instant::now();
-        let mut boards : Vec<_> = self.kifudir.split(",").flat_map(
+        let mut boards : Vec<_> = self.kifudir.iter().flat_map(
             |d| {
                 if let Some(pb) = pb {pb.inc(1);}
                 data_loader::loadkifu(
@@ -526,16 +530,15 @@ impl Training {
                 let pb = self.multibar.add(
                     ProgressBar::new(
                         {
-                            let steps = self.matedir.len() as u64
-                                + self.kifudir.chars().fold(7,
-                                |acc, c| if c == ',' {acc + 1} else {acc});
+                            let steps =
+                                self.matedir.len() + self.kifudir.len() + 7;
                             if self.matefiles.is_empty() {
                                 steps
                             } else {
                                 self.matefiles.chars().fold(steps + 1,
                                 |acc, c| if c == ',' {acc + 1} else {acc})
                             }
-                        }));
+                        } as u64));
                 pb.set_style(
                     ProgressStyle::with_template(
                         "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
