@@ -11,6 +11,7 @@ const MIN_COSANEAL : f64 = 1e-4;
 pub struct Training {
     trainingpart : Vec<bool>,
     kifudir : String,
+    matedir : Vec<String>,
     matefiles : String,
     devtype : String,
     device : tch::Device,
@@ -62,6 +63,7 @@ impl From<argument::Arg> for Training {
 
         let partlist = Self::partlist(&arg.part);
         let kifudir = arg.kifudir.unwrap_or("kifu".to_string()).clone();
+        let matedir = arg.matedir;
         let matefiles = arg.mate_file.unwrap_or_default();
         let devtype = arg.device.unwrap_or("cpu".to_string());
         let devtype = devtype.clone();
@@ -85,6 +87,7 @@ impl From<argument::Arg> for Training {
         Self {
             trainingpart : partlist,
             kifudir,
+            matedir,
             matefiles,
             devtype,
             device,
