@@ -15,6 +15,9 @@ pub struct Arg {
     /// kifu directory
     #[arg(long)]
     pub kifudir : Option<String>,
+    /// mate file directory
+    #[arg(long, value_delimiter=',')]
+    pub matedir : Vec<String>,
     /// mini batch size
     #[arg(long, default_value_t = 16)]
     pub minibatch : i64,
