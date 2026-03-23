@@ -218,6 +218,24 @@ impl Training {
                     d, progress, &mut self.log, pb.is_none())}
             ).collect();
 
+        if !self.matedir.is_empty() {
+            for d in self.matedir.iter() {
+                if let Some(pb) = pb {pb.inc(1);}
+                let mut brds = data_loader::findfiles(&format!("./{d}")).iter().flat_map(
+                    |fname| {
+                    // onli "mate*" are available.
+                    if !fname.starts_with("mate") {return Vec::new();}
+
+                    let path = format!("./{d}/{fname}");
+                    match data_loader::load_mates(&path, progress) {
+                        Ok(arr) => {arr},
+                        Err(msg) => {panic!("{msg}")},
+                    }
+                }).collect::<Vec<_>>();
+                if !brds.is_empty() {boards.append(&mut brds);}
+            }
+        }
+
         if !self.matefiles.is_empty() {
             let mut mates = self.matefiles.split(",").flat_map(
                 |path| {
@@ -508,7 +526,8 @@ impl Training {
                 let pb = self.multibar.add(
                     ProgressBar::new(
                         {
-                            let steps = self.kifudir.chars().fold(7,
+                            let steps = self.matedir.len() as u64
+                                + self.kifudir.chars().fold(7,
                                 |acc, c| if c == ',' {acc + 1} else {acc});
                             if self.matefiles.is_empty() {
                                 steps
