@@ -19,29 +19,22 @@ pub struct Te {
     pub rfen : String,
 }
 
-impl Te {
-    pub fn new(x : usize, y : usize, teban : i8, rfen : String) -> Te {
-        Te {
-            x,
-            y,
-            teban,
-            rfen
-        }
-    }
+impl std::convert::TryFrom<&str> for Te {
+    type Error = String;
 
-    pub fn from(line : &str) -> Option<Te> {
+    fn try_from(line : &str) -> Result<Self, Self::Error> {
         if line.starts_with('#') {
-            return None;
+            return Err("comment line".to_string());
         }
         let elem = line.split_whitespace().collect::<Vec<&str>>();
         // nth teban posxy rfen rfen-teban
         if elem.len() != 5 {
-            return None;
+            return Err(format!("invalid elem size: {elem:?}"));
         }
         let teban = match elem[1] {
             bitboard::STONE_SENTE => bitboard::SENTE,
             bitboard::STONE_GOTE => bitboard::GOTE,
-            _ => return None
+            _ => {return Err(format!("invalid teban: {elem:?}"));}
         };
         let x : usize;
         let y : usize;
@@ -50,11 +43,22 @@ impl Te {
             y = 0;
         } else {
             let c = elem[2].chars().nth(0).unwrap();
-            x = STR_POSX.find(c)?;
+            x = STR_POSX.find(c).unwrap();
             y = elem[2].chars().nth(1).unwrap().to_digit(10).unwrap() as usize;
         }
         let rfen = format!("{} {}", elem[3], elem[4]);
-        Some(Te {x, y, teban, rfen})
+        Ok(Te {x, y, teban, rfen})
+    }
+}
+
+impl Te {
+    pub fn new(x : usize, y : usize, teban : i8, rfen : String) -> Te {
+        Te {
+            x,
+            y,
+            teban,
+            rfen
+        }
     }
 
     pub fn pos(&self) -> String {
@@ -95,17 +99,17 @@ fn testte() {
     assert_eq!("c4", te.pos());
     assert_eq!("23 [] c4 ABCDEFGH\n", te.to_str(23));
 
-    let te = Te::from("");
-    assert!(te.is_none());
+    let te = Te::try_from("");
+    assert!(te.is_err());
 
-    let te = Te::from("1 @@ a1 rfenb");
-    assert!(te.is_none());
+    let te = Te::try_from("1 @@ a1 rfenb");
+    assert!(te.is_err());
 
-    let te = Te::from("1  @@ a1 rfenb");
-    assert!(te.is_none());
+    let te = Te::try_from("1  @@ a1 rfenb");
+    assert!(te.is_err());
 
-    let te = Te::from("1 @@ a1 rfen b");
-    assert!(te.is_some());
+    let te = Te::try_from("1 @@ a1 rfen b");
+    assert!(te.is_ok());
     let te = te.unwrap();
     assert_eq!(1, te.x);
     assert_eq!(1, te.y);
@@ -114,8 +118,8 @@ fn testte() {
     assert_eq!("a1", te.pos());
     assert_eq!("1 @@ a1 rfen b\n", te.to_str(1));
 
-    let te = Te::from("2 [] h8 rfen w");
-    assert!(te.is_some());
+    let te = Te::try_from("2 [] h8 rfen w");
+    assert!(te.is_ok());
     let te = te.unwrap();
     assert_eq!(8, te.x);
     assert_eq!(8, te.y);
@@ -130,22 +134,15 @@ pub struct Kifu {
     pub score : Option<i8>,
 }
 
-impl Kifu {
-    pub fn new() -> Kifu {
-        Kifu {
-            list : Vec::<Te>::new(),
-            score : None,
-        }
-    }
-
-    pub fn from(lines : &Vec<&str>) -> Kifu {
+impl std::convert::From<&Vec<&str>> for Kifu {
+    fn from(lines : &Vec<&str>) -> Self {
         let mut ret = Kifu {
             list : Vec::<Te>::new(),
             score : None,
         };
         for &l in lines {
-            let te = Te::from(l);
-            if te.is_none() {
+            let te = Te::try_from(l);
+            if te.is_err() {
                 continue;
             }
             ret.list.push(te.unwrap());
@@ -165,6 +162,34 @@ impl Kifu {
         // }
         ret
     }
+}
+
+impl Clone for Kifu {
+    fn clone(&self) -> Self {
+        let mut ret = Kifu::new();
+        ret.score = self.score;
+        for te in self.list.iter() {
+            ret.append(te.x, te.y, te.teban, te.rfen.clone());
+        }
+        ret
+    }
+}
+
+impl std::fmt::Display for Kifu {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let lines = self.list.iter().enumerate().map(
+            |(i, a)| a.to_str(i + 1)).collect::<Vec<String>>();
+        write!(f, "{}", lines.join("") + &self.score2str())
+    }
+}
+
+impl Kifu {
+    pub fn new() -> Kifu {
+        Kifu {
+            list : Vec::<Te>::new(),
+            score : None,
+        }
+    }
 
     #[allow(dead_code)]
     pub fn invalid() -> Kifu {
@@ -174,24 +199,8 @@ impl Kifu {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn copy(&self) -> Kifu {
-        let mut ret = Kifu::new();
-        ret.score = self.score;
-        for te in self.list.iter() {
-            ret.append(te.x, te.y, te.teban, te.rfen.clone());
-        }
-        ret
-    }
     pub fn append(&mut self, x : usize, y : usize, t : i8, rfen : String) {
         self.list.push(Te::new(x, y, t, rfen));
-    }
-
-    #[allow(dead_code)]
-    pub fn to_str(&self) -> String {
-        let lines = self.list.iter().enumerate().map(
-            |(i, a)| a.to_str(i + 1)).collect::<Vec<String>>();
-        lines.join("") + &self.score2str()
     }
 
     #[allow(dead_code)]
