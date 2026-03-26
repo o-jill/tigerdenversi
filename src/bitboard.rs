@@ -23,10 +23,15 @@ const STR_NUM : &str = "012345678";
 pub const STONE_SENTE : &str = "@@";
 pub const STONE_GOTE : &str = "[]";
 pub const LSB_CELL : u64 = 0x0000000000000001;
+#[allow(dead_code)]
 const LT_CELL : u64 = LSB_CELL;
+#[allow(dead_code)]
 const RT_CELL : u64 = 0x0000000000000080;
+#[allow(dead_code)]
 const LB_CELL : u64 = 0x0100000000000000;
+#[allow(dead_code)]
 const RB_CELL : u64 = 0x8000000000000000;
+#[allow(dead_code)]
 const CORNER_CELL : u64 = 0x8100000000000081;
 const GUARD_RIGHT : u64 = 0xfefefefefefefefe;
 const GUARD_LEFT : u64 = 0x7f7f7f7f7f7f7f7f;
@@ -1495,6 +1500,7 @@ impl BitBoard {
         ]
     }
 
+    #[allow(dead_code)]
     fn fixstones_right(startbit : u64, tgt : u64, count : &mut i32) -> u64 {
         let mut fcells = 0u64;
         let mut bit = startbit;
@@ -1508,6 +1514,7 @@ impl BitBoard {
         fcells
     }
 
+    #[allow(dead_code)]
     fn fixstones_left(startbit : u64, tgt : u64, count : &mut i32) -> u64 {
         let mut fcells = 0u64;
         let mut bit = startbit;
@@ -1521,6 +1528,7 @@ impl BitBoard {
         fcells
     }
 
+    #[allow(dead_code)]
     fn fixstones_up(startbit : u64, tgt : u64, count : &mut i32) -> u64 {
         let mut fcells = 0u64;
         let mut bit = startbit;
@@ -1534,6 +1542,7 @@ impl BitBoard {
         fcells
     }
 
+    #[allow(dead_code)]
     fn fixstones_down(startbit : u64, tgt : u64, count : &mut i32) -> u64 {
         let mut fcells = 0u64;
         let mut bit = startbit;
@@ -1547,6 +1556,7 @@ impl BitBoard {
         fcells
     }
 
+    #[allow(dead_code)]
     pub fn fixedstones(&self) -> (i8, i8) {
         // return (0, 0);  // この関数が遅いのかを見極める用
         let mut count = 0;
