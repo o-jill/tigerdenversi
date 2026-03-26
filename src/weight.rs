@@ -78,9 +78,10 @@ pub enum EvalFile{
     V12,
 }
 
-impl EvalFile {
-    pub fn to_str(&self) -> &str {
-        match self {
+impl std::fmt::Display for EvalFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}",
+            match self {
             EvalFile::Unknown => {"unknown eval file format."},
             EvalFile::V1 => {"# 65-4-1"},
             EvalFile::V2 => {"# 64+1-4-1"},
@@ -94,9 +95,12 @@ impl EvalFile {
             EvalFile::V10 => {"# 3x 128+1+2-128-16-1"},
             EvalFile::V11 => {"# 3x 128+1-128-16-1"},
             EvalFile::V12 => {"# 6x 128-128-16-1"},
-        }
+            }
+        )
     }
+}
 
+impl EvalFile {
     pub fn from(txt : &str) -> Option<EvalFile> {
         match txt {
             "# 65-4-1" => Some(EvalFile::V1),
@@ -325,24 +329,38 @@ impl Weight {
 
     fn readv11(&mut self, line : &str, progress : usize) -> Result<(), String> {
         let csv = line.split(",").collect::<Vec<_>>();
-        let newtable : Vec<f32> = csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
+        let newtable : Vec<f32> =
+                csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
         let nsz = newtable.len();
         if WSZV11 != nsz {
-            return Err(String::from("size mismatch"));
+            return Err(format!("size mismatch v11:{WSZV11} != {nsz}"));
         }
-        self.copy_from_slice(&newtable, progress);
-        // println!("v11:{:?}", self.weight);
+
+        let prgs = progress + 2;
+        self.weight[prgs][..N_WEIGHT].copy_from_slice(&newtable);
+        self.weight[prgs + 1][..N_WEIGHT].copy_from_slice(&newtable);
+
         Ok(())
     }
 
-    fn readv12(&mut self, _line : &str, _progress : usize) -> Result<(), String> {
-        Err(String::from("v9 format is not supported any more."))
+    fn readv12(&mut self, line : &str, progress : usize) -> Result<(), String> {
+        let csv = line.split(",").collect::<Vec<_>>();
+        let newtable : Vec<f32> =
+                csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
+        let nsz = newtable.len();
+        if WSZV12 != nsz {
+            return Err(format!("size mismatch v12:{WSZV12} != {nsz}"));
+        }
+
+        self.weight[progress][..N_WEIGHT].copy_from_slice(&newtable);
+
+        Ok(())
     }
 
     #[allow(dead_code)]
     pub fn writev9(&self, path : &str) ->Result<(), std::io::Error> {
         // header
-        let mut outp = format!("{}\n", EvalFile::V9.to_str());
+        let mut outp = format!("{}\n", EvalFile::V9);
 
         // weights
         for prgs in 0..N_PROGRESS_DIV {
@@ -357,6 +375,18 @@ impl Weight {
         f.write_all(outp.as_bytes())?;
 
         Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub fn writev12(&self, path : &str) {
+        let mut f = fs::File::create(path).unwrap();
+        f.write_all(
+            format!("{}\n", EvalFile::V12).as_bytes()).unwrap();
+        for prgs in 0..N_PROGRESS_DIV {
+            let w = &self.weight[prgs];
+            let sv = w.iter().map(|a| a.to_string()).collect::<Vec<String>>();
+            f.write_all((sv.join(",") + "\n").as_bytes()).unwrap();
+        }
     }
 
     pub fn write_latest(&self, path : &str) ->Result<(), std::io::Error> {
