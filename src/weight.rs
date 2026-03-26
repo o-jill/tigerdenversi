@@ -100,25 +100,29 @@ impl std::fmt::Display for EvalFile {
     }
 }
 
-impl EvalFile {
-    pub fn from(txt : &str) -> Option<EvalFile> {
+impl std::convert::TryFrom<&str> for EvalFile {
+    type Error = String;
+
+    fn try_from(txt: &str) -> Result<Self, Self::Error> {
         match txt {
-            "# 65-4-1" => Some(EvalFile::V1),
-            "# 64+1-4-1" => Some(EvalFile::V2),
-            "# 64+1+2-4-1" => Some(EvalFile::V3),
-            "# 64+1+2-8-1" => Some(EvalFile::V4),
-            "# 64+1+2-16-1" => Some(EvalFile::V5),
-            "# 64+1+2-32-1" => Some(EvalFile::V6),
-            "# 64+1+2-32-16-1" => Some(EvalFile::V7),
-            "# 64+1+2-128-16-1" => Some(EvalFile::V8),
-            "# 3x 64+1+2-128-16-1" => Some(EvalFile::V9),
-            "# 3x 128+1+2-128-16-1" => Some(EvalFile::V10),
-            "# 3x 128+1-128-16-1" => Some(EvalFile::V11),
-            "# 6x 128-128-16-1" => Some(EvalFile::V12),
-            _ => None
+            "# 65-4-1" => Ok(EvalFile::V1),
+            "# 64+1-4-1" => Ok(EvalFile::V2),
+            "# 64+1+2-4-1" => Ok(EvalFile::V3),
+            "# 64+1+2-8-1" => Ok(EvalFile::V4),
+            "# 64+1+2-16-1" => Ok(EvalFile::V5),
+            "# 64+1+2-32-1" => Ok(EvalFile::V6),
+            "# 64+1+2-32-16-1" => Ok(EvalFile::V7),
+            "# 64+1+2-128-16-1" => Ok(EvalFile::V8),
+            "# 3x 64+1+2-128-16-1" => Ok(EvalFile::V9),
+            "# 3x 128+1+2-128-16-1" => Ok(EvalFile::V10),
+            "# 3x 128+1-128-16-1" => Ok(EvalFile::V11),
+            "# 6x 128-128-16-1" => Ok(EvalFile::V12),
+            _ => Err(format!("Unknown Header text: {txt}")),
         }
     }
+}
 
+impl EvalFile {
     #[allow(dead_code)]
     pub fn latest_header() -> String {
         #[cfg(feature = "fixed_stones")] {
@@ -234,8 +238,7 @@ impl Weight {
                         if format != EvalFile::Unknown {
                             continue;
                         }
-                        let res = EvalFile::from(&l);
-                        if let Some(fmt) = res {
+                        if let Ok(fmt) = EvalFile::try_from(l.as_str()) {
                             format = fmt;
                         }
                         continue;
