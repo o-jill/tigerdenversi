@@ -260,7 +260,7 @@ fn testkifu() {
     let kifu = Kifu::new();
     assert_eq!(0, kifu.list.len());
     assert_eq!(None, kifu.score);
-    assert_eq!("on going...", kifu.to_str());
+    assert_eq!("on going...", kifu.to_string());
 
     let lines = "55 @@ h5 dD/AdC/BcC/BaAbAa/Af1/AaAaA1a1/BcC/G1 b\n\
     56 [] f6 dD/AdC/BcC/BaAbB/H/AaAaA1A1/BcC/G1 w\n\
@@ -291,7 +291,7 @@ fn testkifu() {
     assert_eq!(kifu.score, Some(4));
     assert_eq!(kifu.winner(), Some(Winner::Sente));
     assert_eq!(kifu.score2str(), "SENTE won. 4");
-    let kifu2 = kifu.copy();
+    let kifu2 = kifu.clone();
     assert_eq!(kifu.score, kifu2.score);
     for ((i, a), b) in kifu.list.iter().enumerate().zip(kifu2.list.iter()) {
         assert_eq!(a.to_str(i), b.to_str(i));
