@@ -61,6 +61,10 @@ impl Te {
         }
     }
 
+    ///
+    /// # Returns
+    /// Position text("a1"~"h8") or pass("PS" )
+    ///
     pub fn pos(&self) -> String {
         if self.x == 0 || self.y == 0 {
             return String::from("PS")
@@ -69,10 +73,18 @@ impl Te {
     }
 
     #[allow(dead_code)]
-    pub fn to_str(&self, i : usize) -> String {
+    /// generate a line in a kifu.
+    ///
+    /// # Arguments
+    /// - `nth`` n-th move
+    ///
+    /// # Returns
+    /// "`n-th` `turn` `position` `rfen`LF"
+    ///
+    pub fn to_note(&self, nth : usize) -> String {
         format!(
             "{} {} {} {}\n",
-            i, match self.teban {
+            nth, match self.teban {
                 bitboard::SENTE => { bitboard::STONE_SENTE },
                 bitboard::GOTE => { bitboard::STONE_GOTE },
                 _ => { "  "},
@@ -89,7 +101,7 @@ fn testte() {
     assert_eq!(bitboard::SENTE, te.teban);
     assert_eq!("abcdefgh", te.rfen);
     assert_eq!("PS", te.pos());
-    assert_eq!("99 @@ PS abcdefgh\n", te.to_str(99));
+    assert_eq!("99 @@ PS abcdefgh\n", te.to_note(99));
 
     let te = Te::new(3, 4, bitboard::GOTE, "ABCDEFGH".to_string());
     assert_eq!(3, te.x);
@@ -97,7 +109,7 @@ fn testte() {
     assert_eq!(bitboard::GOTE, te.teban);
     assert_eq!("ABCDEFGH", te.rfen);
     assert_eq!("c4", te.pos());
-    assert_eq!("23 [] c4 ABCDEFGH\n", te.to_str(23));
+    assert_eq!("23 [] c4 ABCDEFGH\n", te.to_note(23));
 
     let te = Te::try_from("");
     assert!(te.is_err());
@@ -116,7 +128,7 @@ fn testte() {
     assert_eq!(bitboard::SENTE, te.teban);
     assert_eq!("rfen b", te.rfen);
     assert_eq!("a1", te.pos());
-    assert_eq!("1 @@ a1 rfen b\n", te.to_str(1));
+    assert_eq!("1 @@ a1 rfen b\n", te.to_note(1));
 
     let te = Te::try_from("2 [] h8 rfen w");
     assert!(te.is_ok());
@@ -126,7 +138,7 @@ fn testte() {
     assert_eq!(bitboard::GOTE, te.teban);
     assert_eq!("rfen w", te.rfen);
     assert_eq!("h8", te.pos());
-    assert_eq!("2 [] h8 rfen w\n", te.to_str(2));
+    assert_eq!("2 [] h8 rfen w\n", te.to_note(2));
 }
 
 pub struct Kifu {
@@ -178,7 +190,7 @@ impl Clone for Kifu {
 impl std::fmt::Display for Kifu {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let lines = self.list.iter().enumerate().map(
-            |(i, a)| a.to_str(i + 1)).collect::<Vec<String>>();
+            |(i, a)| a.to_note(i + 1)).collect::<Vec<String>>();
         write!(f, "{}", lines.join("") + &self.score2str())
     }
 }
@@ -294,6 +306,6 @@ fn testkifu() {
     let kifu2 = kifu.clone();
     assert_eq!(kifu.score, kifu2.score);
     for ((i, a), b) in kifu.list.iter().enumerate().zip(kifu2.list.iter()) {
-        assert_eq!(a.to_str(i), b.to_str(i));
+        assert_eq!(a.to_note(i), b.to_note(i));
     }
 }
