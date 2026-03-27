@@ -412,7 +412,7 @@ impl Weight {
     }
 
     #[allow(dead_code)]
-    pub fn copy(&mut self, src : &Weight) {
+    pub fn copy_from(&mut self, src : &Weight) {
         for (d, s) in self.weight.iter_mut().zip(src.weight.iter()) {
             d.copy_from_slice(s);
         }
