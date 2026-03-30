@@ -339,7 +339,7 @@ impl Weight {
             return Err(format!("size mismatch v11:{WSZV11} != {nsz}"));
         }
 
-        let prgs = progress + 2;
+        let prgs = progress * 2;
         self.weight[prgs][..N_WEIGHT].copy_from_slice(&newtable);
         self.weight[prgs + 1][..N_WEIGHT].copy_from_slice(&newtable);
 
