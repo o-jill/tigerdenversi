@@ -43,7 +43,12 @@ impl std::convert::TryFrom<&str> for Te {
             y = 0;
         } else {
             let c = elem[2].chars().nth(0).unwrap();
-            x = STR_POSX.find(c).unwrap();
+            x = match STR_POSX.find(c) {
+                Some(x) => {x},
+                _ => {
+                    return Err(format!("Unknown position letter {c} in {line}!"));
+                },
+            };
             y = elem[2].chars().nth(1).unwrap().to_digit(10).unwrap() as usize;
         }
         let rfen = format!("{} {}", elem[3], elem[4]);
