@@ -5,7 +5,7 @@ use rayon::prelude::*;
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
 
 // list up kifu
-pub fn findfiles(kifupath : &str) -> Vec<String> {
+pub fn findfiles(kifupath : &str, pattern : &str) -> Vec<String> {
     // let sta = std::time::Instant::now();
     let dir = std::fs::read_dir(kifupath).unwrap();
     let mut files = dir.filter_map(|entry| {
@@ -14,7 +14,7 @@ pub fn findfiles(kifupath : &str) -> Vec<String> {
                 n.to_str().unwrap().to_string()
             )
         )}).filter(|fnm| {
-            fnm.contains("kifu")
+            fnm.contains(pattern)
             // fnm.contains(".txt")
         }).collect::<Vec<String>>();
     // println!("{:?}", files);
@@ -22,6 +22,14 @@ pub fn findfiles(kifupath : &str) -> Vec<String> {
     files.sort();
     // println!("{}usec",sta.elapsed().as_micros());
     files
+}
+
+pub fn find_kifu_files(kifupath : &str) -> Vec<String> {
+    findfiles(kifupath, "kifu")
+}
+
+pub fn find_mate_files(kifupath : &str) -> Vec<String> {
+    findfiles(kifupath, "mate")
 }
 
 pub fn loadkifu(files : &[String], d : &str, progress : usize,

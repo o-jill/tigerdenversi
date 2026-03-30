@@ -218,14 +218,14 @@ impl Training {
             |d| {
                 if let Some(pb) = pb {pb.inc(1);}
                 data_loader::loadkifu(
-                    &data_loader::findfiles(&format!("./{d}")),
+                    &data_loader::find_kifu_files(&format!("./{d}")),
                     d, progress, &mut self.log, pb.is_none())}
             ).collect();
 
         if !self.matedir.is_empty() {
             for d in self.matedir.iter() {
                 if let Some(pb) = pb {pb.inc(1);}
-                let mut brds = data_loader::findfiles(&format!("./{d}")).iter().flat_map(
+                let mut brds = data_loader::find_mate_files(&format!("./{d}")).iter().flat_map(
                     |fname| {
                     // onli "mate*" are available.
                     if !fname.starts_with("mate") {return Vec::new();}
