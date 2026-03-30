@@ -102,7 +102,12 @@ fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
                 if l.len() < 11 || l.starts_with("#") {continue;}
                 // rfen,score
                 let elem : Vec<&str> = l.split(",").collect();
-                let ban = bitboard::BitBoard::try_from(elem[0])?;
+                let ban = match bitboard::BitBoard::try_from(elem[0]) {
+                    Ok(b) => {b},
+                    Err(msg) => {
+                        panic!("error: {msg} @ {}", elem[0]);
+                    },
+                };
                 if !ban.is_progress(progress) {continue;}
 
                 // let (b, w) = ban.fixedstones();
