@@ -329,7 +329,7 @@ impl Weight {
         let mut array = [0f32 ; WSZV12];
         let idx = N_WEIGHT_INPUTBIAS;
         // 入力の重みをコピー
-        array.copy_from_slice(&newtable[..idx]);
+        array[..idx].copy_from_slice(&newtable[..idx]);
         // 入力のバイアス以降をコピー
         array[idx..].copy_from_slice(&newtable[idx + 128 * 3..]);
 
@@ -351,7 +351,7 @@ impl Weight {
         let mut array = [0f32 ; WSZV12];
         let idx = N_WEIGHT_INPUTBIAS;
         // 入力の重みをコピー
-        array.copy_from_slice(&newtable[..idx]);
+        array[..idx].copy_from_slice(&newtable[..idx]);
         // 入力のバイアス以降をコピー
         array[idx..].copy_from_slice(&newtable[idx + 128..]);
 
