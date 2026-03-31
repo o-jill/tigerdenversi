@@ -366,7 +366,8 @@ impl Weight {
         let mut outp = format!("{}\n", EvalFile::V9);
 
         // weights
-        for prgs in 0..N_PROGRESS_DIV {
+        let progress_v9 = 3;
+        for prgs in 0..progress_v9 {
             let w = &self.weight[prgs];
             let sv = w.iter().map(|a| a.to_string()).collect::<Vec<String>>();
             outp += &sv.join(",");
@@ -374,27 +375,31 @@ impl Weight {
         }
 
         // put to a file
-        let mut f = fs::File::create(path).unwrap();
-        f.write_all(outp.as_bytes())?;
-
-        Ok(())
+        let mut f = fs::File::create(path)?;
+        f.write_all(outp.as_bytes())
     }
 
     #[allow(dead_code)]
-    pub fn writev12(&self, path : &str) {
-        let mut f = fs::File::create(path).unwrap();
-        f.write_all(
-            format!("{}\n", EvalFile::V12).as_bytes()).unwrap();
-        for prgs in 0..N_PROGRESS_DIV {
+    pub fn writev12(&self, path : &str) ->Result<(), std::io::Error> {
+        // header
+        let mut outp = format!("{}\n", EvalFile::V12);
+
+        // weights
+        let progress_v12 = 6;
+        for prgs in 0..progress_v12 {
             let w = &self.weight[prgs];
             let sv = w.iter().map(|a| a.to_string()).collect::<Vec<String>>();
-            f.write_all((sv.join(",") + "\n").as_bytes()).unwrap();
+            outp += &sv.join(",");
+            outp += "\n";
         }
+
+        let mut f = fs::File::create(path)?;
+        f.write_all(outp.as_bytes())
     }
 
     pub fn write_latest(&self, path : &str) ->Result<(), std::io::Error> {
         // header
-        let mut outp = format!("{}\n", EvalFile::latest_header());
+        let mut outp = EvalFile::latest_header() + "\n";
 
         // weights
         for prgs in 0..N_PROGRESS_DIV {
@@ -405,10 +410,8 @@ impl Weight {
         }
 
         // put to a file
-        let mut f = fs::File::create(path).unwrap();
-        f.write_all(outp.as_bytes())?;
-
-        Ok(())
+        let mut f = fs::File::create(path)?;
+        f.write_all(outp.as_bytes())
     }
 
     #[allow(dead_code)]
