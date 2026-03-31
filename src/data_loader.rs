@@ -16,6 +16,13 @@ pub fn findfiles(path : &str, pattern : &str) -> Vec<String> {
     // let sta = std::time::Instant::now();
     let dir = std::fs::read_dir(path).unwrap();
     let mut files = dir.filter_map(|entry| {
+        if let Ok(e) = &entry {
+            if let Ok(m) = e.metadata() {
+                if !m.is_file() {
+                    return None;
+                }
+            }
+        }
         entry.ok().and_then(|e|
             e.path().file_name().map(|n|
                 n.to_str().unwrap().to_string()
