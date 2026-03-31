@@ -325,8 +325,17 @@ impl Weight {
         if WSZV10 != nsz {
             return Err(String::from("size mismatch"));
         }
+
+        let mut array = [0f32 ; WSZV12];
+        let idx = N_WEIGHT_INPUTBIAS;
+        // 入力の重みをコピー
+        array.copy_from_slice(&newtable[..idx]);
+        // 入力のバイアス以降をコピー
+        array[idx..].copy_from_slice(&newtable[idx + 128 * 3..]);
+
         self.copy_from_slice(&newtable, progress);
         // println!("v10:{:?}", self.weight);
+
         Ok(())
     }
 
@@ -339,9 +348,16 @@ impl Weight {
             return Err(format!("size mismatch v11:{WSZV11} != {nsz}"));
         }
 
+        let mut array = [0f32 ; WSZV12];
+        let idx = N_WEIGHT_INPUTBIAS;
+        // 入力の重みをコピー
+        array.copy_from_slice(&newtable[..idx]);
+        // 入力のバイアス以降をコピー
+        array[idx..].copy_from_slice(&newtable[idx + 128..]);
+
         let prgs = progress * 2;
-        self.weight[prgs][..N_WEIGHT].copy_from_slice(&newtable);
-        self.weight[prgs + 1][..N_WEIGHT].copy_from_slice(&newtable);
+        self.copy_from_slice(&array, prgs);
+        self.copy_from_slice(&array, prgs + 1);
 
         Ok(())
     }
