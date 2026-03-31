@@ -44,18 +44,20 @@ impl From<argument::Arg> for Training {
     fn from(arg : argument::Arg) -> Self {
         let strdt = Utc::now().format("%Y%m%d%H%M%S").to_string();
         let path = if let Some(path) = arg.log {
-            let invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
-            if path.chars().any(|c| invalid_chars.contains(&c)) {
-                panic!("path:{path} contains invalid letter!");
-            }
-            path
-        } else {
-            if cfg!(target_os="windows") {
-                String::from("nul")
+                let path = path.replace("<DATETIME>", &strdt);
+                let invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+                if path.chars().any(|c| invalid_chars.contains(&c)) {
+                    panic!("path:{path} contains invalid letter!");
+                }
+                path
             } else {
-                String::from("/dev/null")
-            }
-        }.replace("<DATETIME>", &strdt);
+                if cfg!(target_os="windows") {
+                    String::from("nul")
+                } else {
+                    String::from("/dev/null")
+                }
+            };
+
         let mut log = match std::fs::File::create(path) {
         Ok(f) => {f},
         Err(e) => {panic!("{e}")},
