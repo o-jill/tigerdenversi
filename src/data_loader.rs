@@ -4,10 +4,17 @@ use rayon::prelude::*;
 
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
 
-// list up kifu
-pub fn findfiles(kifupath : &str, pattern : &str) -> Vec<String> {
+/// list up files
+///
+/// # Arguments
+/// - `path` directory path to find files.
+/// - `pattern` find files which contains `pattern` is their name.
+///
+/// # Returns
+/// Vec of names of files.
+pub fn findfiles(path : &str, pattern : &str) -> Vec<String> {
     // let sta = std::time::Instant::now();
-    let dir = std::fs::read_dir(kifupath).unwrap();
+    let dir = std::fs::read_dir(path).unwrap();
     let mut files = dir.filter_map(|entry| {
         entry.ok().and_then(|e|
             e.path().file_name().map(|n|
@@ -24,12 +31,27 @@ pub fn findfiles(kifupath : &str, pattern : &str) -> Vec<String> {
     files
 }
 
+
+/// list up kifu
+///
+/// # Arguments
+/// - `matepath` directory path to find kifu files.
+///
+/// # Returns
+/// Vec of names of files.
 pub fn find_kifu_files(kifupath : &str) -> Vec<String> {
     findfiles(kifupath, "kifu")
 }
 
-pub fn find_mate_files(kifupath : &str) -> Vec<String> {
-    findfiles(kifupath, "mate")
+/// list up mate
+///
+/// # Arguments
+/// - `matepath` directory path to find mate files.
+///
+/// # Returns
+/// Vec of names of files.
+pub fn find_mate_files(matepath : &str) -> Vec<String> {
+    findfiles(matepath, "mate")
 }
 
 pub fn loadkifu(files : &[String], d : &str, progress : usize,
