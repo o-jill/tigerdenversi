@@ -145,7 +145,7 @@ fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
                 let ban = match bitboard::BitBoard::try_from(elem[0]) {
                     Ok(b) => {b},
                     Err(msg) => {
-                        panic!("error: {msg} @ {}", elem[0]);
+                        return Err(format!("error: {msg} @ {}", elem[0]));
                     },
                 };
                 if !ban.is_progress(progress) {continue;}
