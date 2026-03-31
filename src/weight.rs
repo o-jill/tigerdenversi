@@ -349,7 +349,11 @@ impl Weight {
     fn readv12(&mut self, line : &str, progress : usize) -> Result<(), String> {
         let csv = line.split(",").collect::<Vec<_>>();
         let newtable : Vec<f32> =
-                csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
+            match csv.iter().map(|&a| a.parse::<f32>())
+                .collect::<Result<Vec<f32>, _>>() {
+                    Ok(w) => {w},
+                    Err(e) => {return Err(format!("{e}"))},
+                };
         let nsz = newtable.len();
         if WSZV12 != nsz {
             return Err(format!("size mismatch v12:{WSZV12} != {nsz}"));
