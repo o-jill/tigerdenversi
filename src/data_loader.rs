@@ -132,6 +132,9 @@ fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
                 if l.len() < 11 || l.starts_with("#") {continue;}
                 // rfen,score
                 let elem : Vec<&str> = l.split(",").collect();
+                if elem.len() < 2 {
+                    return Err(format!("# of elem < 2 w/ {l}!"));
+                }
                 let ban = match bitboard::BitBoard::try_from(elem[0]) {
                     Ok(b) => {b},
                     Err(msg) => {
