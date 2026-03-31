@@ -337,7 +337,7 @@ impl Weight {
         // 入力のバイアス以降をコピー
         array[idx..].copy_from_slice(&newtable[idx + 128 * 3..]);
 
-        self.copy_from_slice(&newtable, progress);
+        self.copy_from_slice(&array, progress);
         // println!("v10:{:?}", self.weight);
 
         Ok(())
