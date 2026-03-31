@@ -60,11 +60,11 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize,
     // let sta = std::time::Instant::now();
     let shared = std::sync::Mutex::new(log);
     let boards = files.par_iter().flat_map(|fname| {
-        let path = format!("{d}/{fname}");
+        let path = std::path::Path::new(d).join(fname);
         {
             let mut l = shared.lock().unwrap();
-            l.write_all(format!("{path}\n").as_bytes()).unwrap();
-            if show_path {print!("{path}\r");}
+            l.write_all(format!("{}\n", path.display()).as_bytes()).unwrap();
+            if show_path {print!("{}\r", path.display());}
         }
         let content = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();

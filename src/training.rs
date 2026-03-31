@@ -220,20 +220,20 @@ impl Training {
             |d| {
                 if let Some(pb) = pb {pb.inc(1);}
                 data_loader::loadkifu(
-                    &data_loader::find_kifu_files(&format!("./{d}")),
+                    &data_loader::find_kifu_files(d),
                     d, progress, &mut self.log, pb.is_none())}
             ).collect();
 
         if !self.matedir.is_empty() {
             for d in self.matedir.iter() {
                 if let Some(pb) = pb {pb.inc(1);}
-                let mut brds = data_loader::find_mate_files(&format!("./{d}")).iter().flat_map(
+                let mut brds = data_loader::find_mate_files(d).iter().flat_map(
                     |fname| {
                     // onli "mate*" are available.
                     if !fname.starts_with("mate") {return Vec::new();}
 
-                    let path = format!("./{d}/{fname}");
-                    match data_loader::load_mates(&path, progress) {
+                    let path = std::path::Path::new(d).join(fname);
+                    match data_loader::load_mates(&path.display().to_string(), progress) {
                         Ok(arr) => {arr},
                         Err(msg) => {panic!("{msg}")},
                     }
