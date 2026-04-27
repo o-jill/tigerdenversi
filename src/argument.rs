@@ -60,5 +60,6 @@ pub struct Arg {
     pub graph : bool,
     /// paths of files which contains mate boards.
     #[arg(long)]
+    #[arg(long, value_delimiter=',')]
     pub mate_file : Option<String>,
 }
