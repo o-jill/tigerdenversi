@@ -218,7 +218,16 @@ impl Training {
         // let sta = std::time::Instant::now();
         let mut boards : Vec<_> = self.kifudir.iter().flat_map(
             |d| {
-                if let Some(pb) = pb {pb.inc(1);}
+                if let Some(pb) = pb {
+                    pb.inc(1);
+                    let path = std::path::Path::new(d);
+                    let fname = path.components().rev().find_map(|c|
+                        match c {
+                        std::path::Component::Normal(os_str) => {Some(os_str)},
+                        _ => {None},
+                        }).unwrap_or_default();
+                    pb.set_message(format!("dir:{}", fname.to_string_lossy()));
+                }
                 data_loader::loadkifu(
                     &data_loader::find_kifu_files(d),
                     d, progress, &mut self.log, pb.is_none())}
@@ -226,7 +235,16 @@ impl Training {
 
         if !self.matedir.is_empty() {
             for d in self.matedir.iter() {
-                if let Some(pb) = pb {pb.inc(1);}
+                if let Some(pb) = pb {
+                    pb.inc(1);
+                    let path = std::path::Path::new(d);
+                    let fname = path.components().rev().find_map(|c|
+                        match c {
+                        std::path::Component::Normal(os_str) => {Some(os_str)},
+                        _ => {None},
+                        }).unwrap_or_default();
+                    pb.set_message(format!("dir:{}", fname.to_string_lossy()));
+                }
                 let mut brds = data_loader::find_mate_files(d).iter().flat_map(
                     |fname| {
                     // onli "mate*" are available.
