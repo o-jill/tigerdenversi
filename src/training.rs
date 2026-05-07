@@ -279,6 +279,16 @@ impl Training {
         // println!("{}msec",sta.elapsed().as_millis());
         if let Some(pb) = pb {pb.inc(1);}
 
+        // eliminate boards because of RAM size
+        const LARGE_NUMBER_OF_BOARDS : usize = 1024 * 1024 * 128;
+        if boards.len() > LARGE_NUMBER_OF_BOARDS {
+            self.putlog(&format!(
+                "board size:{} exceeds limit({LARGE_NUMBER_OF_BOARDS})",
+                boards.len()));
+            boards.truncate(LARGE_NUMBER_OF_BOARDS);
+            boards.shrink_to_fit();
+        }
+
         let input = tch::Tensor::from_slice(
             &data_loader::extractboards(&boards)).view((boards.len() as i64, INPUTSIZE));
         self.putlog(&format!("input : {} {:?}", input.dim(), input.size()));

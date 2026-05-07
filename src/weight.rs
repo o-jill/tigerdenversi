@@ -125,12 +125,7 @@ impl std::convert::TryFrom<&str> for EvalFile {
 impl EvalFile {
     #[allow(dead_code)]
     pub fn latest_header() -> String {
-        #[cfg(feature = "fixed_stones")] {
-            format!("# {N_PROGRESS_DIV}x 128+1+2-{N_HIDDEN}-{N_HIDDEN2}-1")
-        }
-        #[cfg(not(feature = "fixed_stones"))] {
-            format!("# {N_PROGRESS_DIV}x 128-{N_HIDDEN}-{N_HIDDEN2}-1")
-        }
+        format!("# {N_PROGRESS_DIV}x 128-{N_HIDDEN}-{N_HIDDEN2}-1")
     }
 }
 
