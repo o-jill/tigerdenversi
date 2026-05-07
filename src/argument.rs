@@ -13,8 +13,11 @@ pub struct Arg {
     #[arg(long, default_value_t = 100)]
     pub epoch : usize,
     /// kifu directory
-    #[arg(long)]
-    pub kifudir : Option<String>,
+    #[arg(long, value_delimiter=',')]
+    pub kifudir : Vec<String>,
+    /// mate file directory
+    #[arg(long, value_delimiter=',')]
+    pub matedir : Vec<String>,
     /// mini batch size
     #[arg(long, default_value_t = 16)]
     pub minibatch : i64,
@@ -57,5 +60,6 @@ pub struct Arg {
     pub graph : bool,
     /// paths of files which contains mate boards.
     #[arg(long)]
+    #[arg(long, value_delimiter=',')]
     pub mate_file : Option<String>,
 }

@@ -7,37 +7,24 @@ use std::{fs, io::{BufReader, BufRead}};
  * hidden: 8 + 1
  * output: 1
  */
-pub const N_INPUT_BLACK : usize = 0;
+pub const N_INPUT_BLACK : usize = bitboard::CELL_2D;
 pub const N_INPUT_WHITE : usize = N_INPUT_BLACK + bitboard::CELL_2D;
-pub const N_INPUT_TEBAN : usize = N_INPUT_WHITE + bitboard::CELL_2D;
-#[cfg(feature = "fixed_stones")]
-pub const N_INPUT_FB : usize = N_INPUT_TEBAN + 1;
-#[cfg(feature = "fixed_stones")]
-pub const N_INPUT_FW : usize = N_INPUT_FB + 1;
-#[cfg(not(feature = "fixed_stones"))]
-pub const N_INPUT_FW : usize = N_INPUT_TEBAN;
-
-pub const N_INPUT : usize = N_INPUT_FW + 1;
+pub const N_INPUT : usize = N_INPUT_WHITE;
 
 pub const N_HIDDEN : usize = 128;
 pub const N_HIDDEN2 : usize = 16;
 const N_OUTPUT : usize = 1;
-pub const N_WEIGHT_TEBAN : usize = N_INPUT_TEBAN * N_HIDDEN;
-#[cfg(feature = "fixed_stones")]
-pub const N_WEIGHT_FIXED_B : usize = N_WEIGHT_TEBAN + N_HIDDEN;
-#[cfg(feature = "fixed_stones")]
-pub const N_WEIGHT_FIXED_W : usize = N_WEIGHT_FIXED_B + N_HIDDEN;
-#[cfg(not(feature = "fixed_stones"))]
-pub const N_WEIGHT_FIXED_W : usize = N_WEIGHT_TEBAN;
-pub const N_WEIGHT_INPUTBIAS : usize = N_WEIGHT_FIXED_W + N_HIDDEN;
+
+const N_WEIGHT_INPUT : usize = 0; // N_INPUT_WHITE * N_HIDDEN;
+pub const N_WEIGHT_INPUTBIAS : usize =
+        N_WEIGHT_INPUT + N_INPUT_WHITE * N_HIDDEN;
 pub const N_WEIGHT_LAYER1 : usize = N_WEIGHT_INPUTBIAS + N_HIDDEN;
 pub const N_WEIGHT_LAYER1BIAS : usize = N_WEIGHT_LAYER1 + N_HIDDEN * N_HIDDEN2;
 pub const N_WEIGHT_LAYER2 : usize = N_WEIGHT_LAYER1BIAS + N_HIDDEN2;
 const N_WEIGHT_LAYER2BIAS : usize = N_WEIGHT_LAYER2 + N_HIDDEN2;
-pub const N_WEIGHT : usize =
-  (N_INPUT + 1) * N_HIDDEN + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
+pub const N_WEIGHT : usize = N_WEIGHT_LAYER2BIAS + 1;
 
-pub const N_PROGRESS_DIV : usize = 3;
+pub const N_PROGRESS_DIV : usize = 6;
 
 #[allow(dead_code)]
 const WSZV1 : usize = (bitboard::CELL_2D + 1 + 1) * 4 + 4 + 1;
@@ -65,6 +52,8 @@ const WSZV10 : usize = (bitboard::CELL_2D * 2 + 1 + 2 + 1) * N_HIDDEN
         + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
 const WSZV11 : usize = (bitboard::CELL_2D * 2 + 1 + 1) * N_HIDDEN
         + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
+const WSZV12 : usize = (bitboard::CELL_2D * 2 + 1) * N_HIDDEN
+        + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
 
 // v2
 // 8/8/1A6/2Ab3/2C3/8/8/8 w
@@ -86,11 +75,13 @@ pub enum EvalFile{
     V9,
     V10,
     V11,
+    V12,
 }
 
-impl EvalFile {
-    pub fn to_str(&self) -> &str {
-        match self {
+impl std::fmt::Display for EvalFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}",
+            match self {
             EvalFile::Unknown => {"unknown eval file format."},
             EvalFile::V1 => {"# 65-4-1"},
             EvalFile::V2 => {"# 64+1-4-1"},
@@ -103,34 +94,38 @@ impl EvalFile {
             EvalFile::V9 => {"# 3x 64+1+2-128-16-1"},
             EvalFile::V10 => {"# 3x 128+1+2-128-16-1"},
             EvalFile::V11 => {"# 3x 128+1-128-16-1"},
-        }
+            EvalFile::V12 => {"# 6x 128-128-16-1"},
+            }
+        )
     }
+}
 
-    pub fn from(txt : &str) -> Option<EvalFile> {
+impl std::convert::TryFrom<&str> for EvalFile {
+    type Error = String;
+
+    fn try_from(txt: &str) -> Result<Self, Self::Error> {
         match txt {
-            "# 65-4-1" => Some(EvalFile::V1),
-            "# 64+1-4-1" => Some(EvalFile::V2),
-            "# 64+1+2-4-1" => Some(EvalFile::V3),
-            "# 64+1+2-8-1" => Some(EvalFile::V4),
-            "# 64+1+2-16-1" => Some(EvalFile::V5),
-            "# 64+1+2-32-1" => Some(EvalFile::V6),
-            "# 64+1+2-32-16-1" => Some(EvalFile::V7),
-            "# 64+1+2-128-16-1" => Some(EvalFile::V8),
-            "# 3x 64+1+2-128-16-1" => Some(EvalFile::V9),
-            "# 3x 128+1+2-128-16-1" => Some(EvalFile::V10),
-            "# 3x 128+1-128-16-1" => Some(EvalFile::V11),
-            _ => None
+            "# 65-4-1" => Ok(EvalFile::V1),
+            "# 64+1-4-1" => Ok(EvalFile::V2),
+            "# 64+1+2-4-1" => Ok(EvalFile::V3),
+            "# 64+1+2-8-1" => Ok(EvalFile::V4),
+            "# 64+1+2-16-1" => Ok(EvalFile::V5),
+            "# 64+1+2-32-1" => Ok(EvalFile::V6),
+            "# 64+1+2-32-16-1" => Ok(EvalFile::V7),
+            "# 64+1+2-128-16-1" => Ok(EvalFile::V8),
+            "# 3x 64+1+2-128-16-1" => Ok(EvalFile::V9),
+            "# 3x 128+1+2-128-16-1" => Ok(EvalFile::V10),
+            "# 3x 128+1-128-16-1" => Ok(EvalFile::V11),
+            "# 6x 128-128-16-1" => Ok(EvalFile::V12),
+            _ => Err(format!("Unknown Header text: {txt}")),
         }
     }
+}
 
+impl EvalFile {
     #[allow(dead_code)]
     pub fn latest_header() -> String {
-        #[cfg(feature = "fixed_stones")] {
-            format!("# {N_PROGRESS_DIV}x 128+1+2-{N_HIDDEN}-{N_HIDDEN2}-1")
-        }
-        #[cfg(not(feature = "fixed_stones"))] {
-            format!("# {N_PROGRESS_DIV}x 128+1-{N_HIDDEN}-{N_HIDDEN2}-1")
-        }
+        format!("# {N_PROGRESS_DIV}x 128-{N_HIDDEN}-{N_HIDDEN2}-1")
     }
 }
 
@@ -191,37 +186,7 @@ impl Weight {
     }
 
     pub fn wban(&self, progress : usize) -> &[f32] {
-        &self.weight[progress][..N_WEIGHT_TEBAN]
-    }
-
-    pub fn wteban(&self, progress : usize) -> &[f32] {
-        #[cfg(feature = "fixed_stones")] {
-        &self.weight[progress][N_WEIGHT_TEBAN..N_WEIGHT_FIXED_W]
-        }
-        #[cfg(not(feature = "fixed_stones"))] {
-            &self.weight[progress][N_WEIGHT_TEBAN..N_WEIGHT_INPUTBIAS]
-        }
-    }
-
-    pub fn wfixedstones(&self, progress : usize) -> &[f32] {
-        #[cfg(feature = "fixed_stones")]{
-            &self.weight[progress][N_WEIGHT_FIXED_B..N_WEIGHT_INPUTBIAS]
-        }
-        #[cfg(not(feature = "fixed_stones"))] {
-            &self.weight[progress][..N_WEIGHT_INPUTBIAS]
-        }
-    }
-
-    #[allow(dead_code)]
-    #[cfg(feature = "fixed_stones")]
-    pub fn wfixedstone_b(&self, progress : usize) -> &[f32] {
-        &self.weight[progress][N_WEIGHT_FIXED_B..N_WEIGHT_FIXED_W]
-    }
-
-    #[allow(dead_code)]
-    #[cfg(feature = "fixed_stones")]
-    pub fn wfixedstone_w(&self, progress : usize) -> &[f32] {
-        &self.weight[progress][N_WEIGHT_FIXED_W..N_WEIGHT_INPUTBIAS]
+        &self.weight[progress][..N_WEIGHT_INPUTBIAS]
     }
 
     pub fn wibias(&self, progress : usize) -> &[f32] {
@@ -268,8 +233,7 @@ impl Weight {
                         if format != EvalFile::Unknown {
                             continue;
                         }
-                        let res = EvalFile::from(&l);
-                        if let Some(fmt) = res {
+                        if let Ok(fmt) = EvalFile::try_from(l.as_str()) {
                             format = fmt;
                         }
                         continue;
@@ -295,6 +259,11 @@ impl Weight {
                         },
                         EvalFile::V11 => {
                             self.readv11(&l, idx)?;
+                            idx += 1;
+                            if idx >= N_PROGRESS_DIV {return Ok(());}
+                        },
+                        EvalFile::V12 => {
+                            self.readv12(&l, idx)?;
                             idx += 1;
                             if idx >= N_PROGRESS_DIV {return Ok(());}
                         },
@@ -346,35 +315,81 @@ impl Weight {
 
     fn readv10(&mut self, line : &str, progress : usize) -> Result<(), String> {
         let csv = line.split(",").collect::<Vec<_>>();
-        let newtable : Vec<f32> = csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
+        let newtable : Vec<f32> =
+                match csv.iter().map(|&a| a.parse::<f32>()).collect::<Result<Vec<_>, _>>() {
+                    Ok(w) => {w},
+                    Err(e) => {return Err(format!("{e}"))},
+                };
         let nsz = newtable.len();
         if WSZV10 != nsz {
             return Err(String::from("size mismatch"));
         }
-        self.copy_from_slice(&newtable, progress);
+
+        let mut array = [0f32 ; WSZV12];
+        let idx = N_WEIGHT_INPUTBIAS;
+        // 入力の重みをコピー
+        array[..idx].copy_from_slice(&newtable[..idx]);
+        // 入力のバイアス以降をコピー
+        array[idx..].copy_from_slice(&newtable[idx + 128 * 3..]);
+
+        self.copy_from_slice(&array, progress);
         // println!("v10:{:?}", self.weight);
+
         Ok(())
     }
 
     fn readv11(&mut self, line : &str, progress : usize) -> Result<(), String> {
         let csv = line.split(",").collect::<Vec<_>>();
-        let newtable : Vec<f32> = csv.iter().map(|&a| a.parse::<f32>().unwrap()).collect();
+        let newtable : Vec<f32> =
+                match csv.iter().map(|&a| a.parse::<f32>()).collect::<Result<Vec<_>, _>>() {
+                    Ok(w) => {w},
+                    Err(e) => {return Err(format!("{e}"))},
+                };
         let nsz = newtable.len();
         if WSZV11 != nsz {
-            return Err(String::from("size mismatch"));
+            return Err(format!("size mismatch v11:{WSZV11} != {nsz}"));
         }
-        self.copy_from_slice(&newtable, progress);
-        // println!("v11:{:?}", self.weight);
+
+        let mut array = [0f32 ; WSZV12];
+        let idx = N_WEIGHT_INPUTBIAS;
+        // 入力の重みをコピー
+        array[..idx].copy_from_slice(&newtable[..idx]);
+        // 入力のバイアス以降をコピー
+        array[idx..].copy_from_slice(&newtable[idx + 128..]);
+
+        let prgs = progress * 2;
+        self.copy_from_slice(&array, prgs);
+        self.copy_from_slice(&array, prgs + 1);
+
+        Ok(())
+    }
+
+    fn readv12(&mut self, line : &str, progress : usize) -> Result<(), String> {
+        let csv = line.split(",").collect::<Vec<_>>();
+        let newtable : Vec<f32> =
+            match csv.iter().map(|&a| a.parse::<f32>())
+                .collect::<Result<Vec<f32>, _>>() {
+                    Ok(w) => {w},
+                    Err(e) => {return Err(format!("{e}"))},
+                };
+        let nsz = newtable.len();
+        if WSZV12 != nsz {
+            return Err(format!("size mismatch v12:{WSZV12} != {nsz}"));
+        }
+
+        self.weight[progress][..N_WEIGHT].copy_from_slice(&newtable);
+
         Ok(())
     }
 
     #[allow(dead_code)]
     pub fn writev9(&self, path : &str) ->Result<(), std::io::Error> {
         // header
-        let mut outp = format!("{}\n", EvalFile::V9.to_str());
+        let mut outp = format!("{}\n", EvalFile::V9);
 
         // weights
-        for prgs in 0..N_PROGRESS_DIV {
+        let progress_v9 = 3;
+        for prgs in 0..progress_v9 {
             let w = &self.weight[prgs];
             let sv = w.iter().map(|a| a.to_string()).collect::<Vec<String>>();
             outp += &sv.join(",");
@@ -382,15 +397,31 @@ impl Weight {
         }
 
         // put to a file
-        let mut f = fs::File::create(path).unwrap();
-        f.write_all(outp.as_bytes())?;
+        let mut f = fs::File::create(path)?;
+        f.write_all(outp.as_bytes())
+    }
 
-        Ok(())
+    #[allow(dead_code)]
+    pub fn writev12(&self, path : &str) ->Result<(), std::io::Error> {
+        // header
+        let mut outp = format!("{}\n", EvalFile::V12);
+
+        // weights
+        let progress_v12 = 6;
+        for prgs in 0..progress_v12 {
+            let w = &self.weight[prgs];
+            let sv = w.iter().map(|a| a.to_string()).collect::<Vec<String>>();
+            outp += &sv.join(",");
+            outp += "\n";
+        }
+
+        let mut f = fs::File::create(path)?;
+        f.write_all(outp.as_bytes())
     }
 
     pub fn write_latest(&self, path : &str) ->Result<(), std::io::Error> {
         // header
-        let mut outp = format!("{}\n", EvalFile::latest_header());
+        let mut outp = EvalFile::latest_header() + "\n";
 
         // weights
         for prgs in 0..N_PROGRESS_DIV {
@@ -401,14 +432,12 @@ impl Weight {
         }
 
         // put to a file
-        let mut f = fs::File::create(path).unwrap();
-        f.write_all(outp.as_bytes())?;
-
-        Ok(())
+        let mut f = fs::File::create(path)?;
+        f.write_all(outp.as_bytes())
     }
 
     #[allow(dead_code)]
-    pub fn copy(&mut self, src : &Weight) {
+    pub fn copy_from(&mut self, src : &Weight) {
         for (d, s) in self.weight.iter_mut().zip(src.weight.iter()) {
             d.copy_from_slice(s);
         }
@@ -418,8 +447,11 @@ impl Weight {
 #[test]
 fn test_weight() {
     let weight = Weight::default();
-    assert_eq!(weight.weight.len(), 3);
+    assert_eq!(weight.weight.len(), 6);
     assert_eq!(weight.weight[0].len(), N_WEIGHT);
     assert_eq!(weight.weight[1].len(), N_WEIGHT);
     assert_eq!(weight.weight[2].len(), N_WEIGHT);
+    assert_eq!(weight.weight[3].len(), N_WEIGHT);
+    assert_eq!(weight.weight[4].len(), N_WEIGHT);
+    assert_eq!(weight.weight[5].len(), N_WEIGHT);
 }

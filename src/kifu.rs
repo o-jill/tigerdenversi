@@ -19,6 +19,43 @@ pub struct Te {
     pub rfen : String,
 }
 
+impl std::convert::TryFrom<&str> for Te {
+    type Error = String;
+
+    fn try_from(line : &str) -> Result<Self, Self::Error> {
+        if line.starts_with('#') {
+            return Err("comment line".to_string());
+        }
+        let elem = line.split_whitespace().collect::<Vec<&str>>();
+        // nth teban posxy rfen rfen-teban
+        if elem.len() != 5 {
+            return Err(format!("invalid elem size: {elem:?}"));
+        }
+        let teban = match elem[1] {
+            bitboard::STONE_SENTE => bitboard::SENTE,
+            bitboard::STONE_GOTE => bitboard::GOTE,
+            _ => {return Err(format!("invalid teban: {elem:?}"));}
+        };
+        let x : usize;
+        let y : usize;
+        if elem[2] == "PS" {
+            x = 0;
+            y = 0;
+        } else {
+            let c = elem[2].chars().nth(0).unwrap();
+            x = match STR_POSX.find(c) {
+                Some(x) => {x},
+                _ => {
+                    return Err(format!("Unknown position letter {c} in {line}!"));
+                },
+            };
+            y = elem[2].chars().nth(1).unwrap().to_digit(10).unwrap() as usize;
+        }
+        let rfen = format!("{} {}", elem[3], elem[4]);
+        Ok(Te {x, y, teban, rfen})
+    }
+}
+
 impl Te {
     pub fn new(x : usize, y : usize, teban : i8, rfen : String) -> Te {
         Te {
@@ -29,34 +66,10 @@ impl Te {
         }
     }
 
-    pub fn from(line : &str) -> Option<Te> {
-        if line.starts_with('#') {
-            return None;
-        }
-        let elem = line.split_whitespace().collect::<Vec<&str>>();
-        // nth teban posxy rfen rfen-teban
-        if elem.len() != 5 {
-            return None;
-        }
-        let teban = match elem[1] {
-            bitboard::STONE_SENTE => bitboard::SENTE,
-            bitboard::STONE_GOTE => bitboard::GOTE,
-            _ => return None
-        };
-        let x : usize;
-        let y : usize;
-        if elem[2] == "PS" {
-            x = 0;
-            y = 0;
-        } else {
-            let c = elem[2].chars().nth(0).unwrap();
-            x = STR_POSX.find(c)?;
-            y = elem[2].chars().nth(1).unwrap().to_digit(10).unwrap() as usize;
-        }
-        let rfen = format!("{} {}", elem[3], elem[4]);
-        Some(Te {x, y, teban, rfen})
-    }
-
+    ///
+    /// # Returns
+    /// Position text("a1"~"h8") or pass("PS" )
+    ///
     pub fn pos(&self) -> String {
         if self.x == 0 || self.y == 0 {
             return String::from("PS")
@@ -65,10 +78,18 @@ impl Te {
     }
 
     #[allow(dead_code)]
-    pub fn to_str(&self, i : usize) -> String {
+    /// generate a line in a kifu.
+    ///
+    /// # Arguments
+    /// - `nth`` n-th move
+    ///
+    /// # Returns
+    /// "`n-th` `turn` `position` `rfen`LF"
+    ///
+    pub fn to_note(&self, nth : usize) -> String {
         format!(
             "{} {} {} {}\n",
-            i, match self.teban {
+            nth, match self.teban {
                 bitboard::SENTE => { bitboard::STONE_SENTE },
                 bitboard::GOTE => { bitboard::STONE_GOTE },
                 _ => { "  "},
@@ -85,7 +106,7 @@ fn testte() {
     assert_eq!(bitboard::SENTE, te.teban);
     assert_eq!("abcdefgh", te.rfen);
     assert_eq!("PS", te.pos());
-    assert_eq!("99 @@ PS abcdefgh\n", te.to_str(99));
+    assert_eq!("99 @@ PS abcdefgh\n", te.to_note(99));
 
     let te = Te::new(3, 4, bitboard::GOTE, "ABCDEFGH".to_string());
     assert_eq!(3, te.x);
@@ -93,36 +114,36 @@ fn testte() {
     assert_eq!(bitboard::GOTE, te.teban);
     assert_eq!("ABCDEFGH", te.rfen);
     assert_eq!("c4", te.pos());
-    assert_eq!("23 [] c4 ABCDEFGH\n", te.to_str(23));
+    assert_eq!("23 [] c4 ABCDEFGH\n", te.to_note(23));
 
-    let te = Te::from("");
-    assert!(te.is_none());
+    let te = Te::try_from("");
+    assert!(te.is_err());
 
-    let te = Te::from("1 @@ a1 rfenb");
-    assert!(te.is_none());
+    let te = Te::try_from("1 @@ a1 rfenb");
+    assert!(te.is_err());
 
-    let te = Te::from("1  @@ a1 rfenb");
-    assert!(te.is_none());
+    let te = Te::try_from("1  @@ a1 rfenb");
+    assert!(te.is_err());
 
-    let te = Te::from("1 @@ a1 rfen b");
-    assert!(te.is_some());
+    let te = Te::try_from("1 @@ a1 rfen b");
+    assert!(te.is_ok());
     let te = te.unwrap();
     assert_eq!(1, te.x);
     assert_eq!(1, te.y);
     assert_eq!(bitboard::SENTE, te.teban);
     assert_eq!("rfen b", te.rfen);
     assert_eq!("a1", te.pos());
-    assert_eq!("1 @@ a1 rfen b\n", te.to_str(1));
+    assert_eq!("1 @@ a1 rfen b\n", te.to_note(1));
 
-    let te = Te::from("2 [] h8 rfen w");
-    assert!(te.is_some());
+    let te = Te::try_from("2 [] h8 rfen w");
+    assert!(te.is_ok());
     let te = te.unwrap();
     assert_eq!(8, te.x);
     assert_eq!(8, te.y);
     assert_eq!(bitboard::GOTE, te.teban);
     assert_eq!("rfen w", te.rfen);
     assert_eq!("h8", te.pos());
-    assert_eq!("2 [] h8 rfen w\n", te.to_str(2));
+    assert_eq!("2 [] h8 rfen w\n", te.to_note(2));
 }
 
 pub struct Kifu {
@@ -130,22 +151,15 @@ pub struct Kifu {
     pub score : Option<i8>,
 }
 
-impl Kifu {
-    pub fn new() -> Kifu {
-        Kifu {
-            list : Vec::<Te>::new(),
-            score : None,
-        }
-    }
-
-    pub fn from(lines : &Vec<&str>) -> Kifu {
+impl std::convert::From<&Vec<&str>> for Kifu {
+    fn from(lines : &Vec<&str>) -> Self {
         let mut ret = Kifu {
             list : Vec::<Te>::new(),
             score : None,
         };
         for &l in lines {
-            let te = Te::from(l);
-            if te.is_none() {
+            let te = Te::try_from(l);
+            if te.is_err() {
                 continue;
             }
             ret.list.push(te.unwrap());
@@ -165,6 +179,34 @@ impl Kifu {
         // }
         ret
     }
+}
+
+impl Clone for Kifu {
+    fn clone(&self) -> Self {
+        let mut ret = Kifu::new();
+        ret.score = self.score;
+        for te in self.list.iter() {
+            ret.append(te.x, te.y, te.teban, te.rfen.clone());
+        }
+        ret
+    }
+}
+
+impl std::fmt::Display for Kifu {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let lines = self.list.iter().enumerate().map(
+            |(i, a)| a.to_note(i + 1)).collect::<Vec<String>>();
+        write!(f, "{}", lines.join("") + &self.score2str())
+    }
+}
+
+impl Kifu {
+    pub fn new() -> Kifu {
+        Kifu {
+            list : Vec::<Te>::new(),
+            score : None,
+        }
+    }
 
     #[allow(dead_code)]
     pub fn invalid() -> Kifu {
@@ -174,24 +216,8 @@ impl Kifu {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn copy(&self) -> Kifu {
-        let mut ret = Kifu::new();
-        ret.score = self.score;
-        for te in self.list.iter() {
-            ret.append(te.x, te.y, te.teban, te.rfen.clone());
-        }
-        ret
-    }
     pub fn append(&mut self, x : usize, y : usize, t : i8, rfen : String) {
         self.list.push(Te::new(x, y, t, rfen));
-    }
-
-    #[allow(dead_code)]
-    pub fn to_str(&self) -> String {
-        let lines = self.list.iter().enumerate().map(
-            |(i, a)| a.to_str(i + 1)).collect::<Vec<String>>();
-        lines.join("") + &self.score2str()
     }
 
     #[allow(dead_code)]
@@ -251,7 +277,7 @@ fn testkifu() {
     let kifu = Kifu::new();
     assert_eq!(0, kifu.list.len());
     assert_eq!(None, kifu.score);
-    assert_eq!("on going...", kifu.to_str());
+    assert_eq!("on going...", kifu.to_string());
 
     let lines = "55 @@ h5 dD/AdC/BcC/BaAbAa/Af1/AaAaA1a1/BcC/G1 b\n\
     56 [] f6 dD/AdC/BcC/BaAbB/H/AaAaA1A1/BcC/G1 w\n\
@@ -282,9 +308,9 @@ fn testkifu() {
     assert_eq!(kifu.score, Some(4));
     assert_eq!(kifu.winner(), Some(Winner::Sente));
     assert_eq!(kifu.score2str(), "SENTE won. 4");
-    let kifu2 = kifu.copy();
+    let kifu2 = kifu.clone();
     assert_eq!(kifu.score, kifu2.score);
     for ((i, a), b) in kifu.list.iter().enumerate().zip(kifu2.list.iter()) {
-        assert_eq!(a.to_str(i), b.to_str(i));
+        assert_eq!(a.to_note(i), b.to_note(i));
     }
 }

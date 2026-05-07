@@ -10,7 +10,8 @@ const MIN_COSANEAL : f64 = 1e-4;
 
 pub struct Training {
     trainingpart : Vec<bool>,
-    kifudir : String,
+    kifudir : Vec<String>,
+    matedir : Vec<String>,
     matefiles : String,
     devtype : String,
     device : tch::Device,
@@ -43,21 +44,32 @@ impl From<argument::Arg> for Training {
     fn from(arg : argument::Arg) -> Self {
         let strdt = Utc::now().format("%Y%m%d%H%M%S").to_string();
         let path = if let Some(path) = arg.log {
-            path
-        } else {
-            if cfg!(target_os="windows") {
-                String::from("nul")
+                let path = path.replace("<DATETIME>", &strdt);
+                let invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+                if path.chars().any(|c| invalid_chars.contains(&c)) {
+                    panic!("path:{path} contains invalid letter!");
+                }
+                path
             } else {
-                String::from("/dev/null")
-            }
-        }.replace("<DATETIME>", &strdt);
+                if cfg!(target_os="windows") {
+                    String::from("nul")
+                } else {
+                    String::from("/dev/null")
+                }
+            };
+
         let mut log = match std::fs::File::create(path) {
         Ok(f) => {f},
         Err(e) => {panic!("{e}")},
         };
 
         let partlist = Self::partlist(&arg.part);
-        let kifudir = arg.kifudir.unwrap_or("kifu".to_string()).clone();
+        let kifudir = if arg.kifudir.is_empty() {
+                vec![String::from("kifu") ; 1]
+            } else {
+                arg.kifudir
+            };
+        let matedir = arg.matedir;
         let matefiles = arg.mate_file.unwrap_or_default();
         let devtype = arg.device.unwrap_or("cpu".to_string());
         let devtype = devtype.clone();
@@ -81,6 +93,7 @@ impl From<argument::Arg> for Training {
         Self {
             trainingpart : partlist,
             kifudir,
+            matedir,
             matefiles,
             devtype,
             device,
@@ -203,13 +216,49 @@ impl Training {
     fn prepare_data(&mut self, progress : usize, pb : &Option<ProgressBar>)
             -> (tch::Tensor, tch::Tensor) {
         // let sta = std::time::Instant::now();
-        let mut boards : Vec<_> = self.kifudir.split(",").flat_map(
+        let mut boards : Vec<_> = self.kifudir.iter().flat_map(
             |d| {
-                if let Some(pb) = pb {pb.inc(1);}
+                if let Some(pb) = pb {
+                    pb.inc(1);
+                    let path = std::path::Path::new(d);
+                    let fname = path.components().rev().find_map(|c|
+                        match c {
+                        std::path::Component::Normal(os_str) => {Some(os_str)},
+                        _ => {None},
+                        }).unwrap_or_default();
+                    pb.set_message(format!("dir:{}", fname.to_string_lossy()));
+                }
                 data_loader::loadkifu(
-                    &data_loader::findfiles(&format!("./{d}")),
+                    &data_loader::find_kifu_files(d),
                     d, progress, &mut self.log, pb.is_none())}
             ).collect();
+
+        if !self.matedir.is_empty() {
+            for d in self.matedir.iter() {
+                if let Some(pb) = pb {
+                    pb.inc(1);
+                    let path = std::path::Path::new(d);
+                    let fname = path.components().rev().find_map(|c|
+                        match c {
+                        std::path::Component::Normal(os_str) => {Some(os_str)},
+                        _ => {None},
+                        }).unwrap_or_default();
+                    pb.set_message(format!("dir:{}", fname.to_string_lossy()));
+                }
+                let mut brds = data_loader::find_mate_files(d).iter().flat_map(
+                    |fname| {
+                    // onli "mate*" are available.
+                    if !fname.starts_with("mate") {return Vec::new();}
+
+                    let path = std::path::Path::new(d).join(fname);
+                    match data_loader::load_mates(&path.display().to_string(), progress) {
+                        Ok(arr) => {arr},
+                        Err(msg) => {panic!("{msg}")},
+                    }
+                }).collect::<Vec<_>>();
+                if !brds.is_empty() {boards.append(&mut brds);}
+            }
+        }
 
         if !self.matefiles.is_empty() {
             let mut mates = self.matefiles.split(",").flat_map(
@@ -229,6 +278,16 @@ impl Training {
         boards.shuffle(&mut rand::thread_rng());
         // println!("{}msec",sta.elapsed().as_millis());
         if let Some(pb) = pb {pb.inc(1);}
+
+        // eliminate boards because of RAM size
+        const LARGE_NUMBER_OF_BOARDS : usize = 1024 * 1024 * 128;
+        if boards.len() > LARGE_NUMBER_OF_BOARDS {
+            self.putlog(&format!(
+                "board size:{} exceeds limit({LARGE_NUMBER_OF_BOARDS})",
+                boards.len()));
+            boards.truncate(LARGE_NUMBER_OF_BOARDS);
+            boards.shrink_to_fit();
+        }
 
         let input = tch::Tensor::from_slice(
             &data_loader::extractboards(&boards)).view((boards.len() as i64, INPUTSIZE));
@@ -501,15 +560,15 @@ impl Training {
                 let pb = self.multibar.add(
                     ProgressBar::new(
                         {
-                            let steps = self.kifudir.chars().fold(7,
-                                |acc, c| if c == ',' {acc + 1} else {acc});
+                            let steps =
+                                self.matedir.len() + self.kifudir.len() + 7;
                             if self.matefiles.is_empty() {
                                 steps
                             } else {
                                 self.matefiles.chars().fold(steps + 1,
                                 |acc, c| if c == ',' {acc + 1} else {acc})
                             }
-                        }));
+                        } as u64));
                 pb.set_style(
                     ProgressStyle::with_template(
                         "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
@@ -645,25 +704,25 @@ fn test_partlist() {
 
     let s1 = Some(String::new());
     let p1 = Training::partlist(&s1);
-    assert_eq!(p1, vec![true, true, true]);
+    assert_eq!(p1, vec![true, true, true, true, true, true]);
 
     let s2 = Some(String::from("1,,0"));
     let p2 = Training::partlist(&s2);
-    assert_eq!(p2, vec![true, false, false]);
+    assert_eq!(p2, vec![true, false, false, true, true, true]);
 
-    let s3 = Some(String::from("-1,false,zero"));
+    let s3 = Some(String::from("-1,false,zero,no,none,off"));
     let p3 = Training::partlist(&s3);
-    assert_eq!(p3, vec![true, false, false]);
+    assert_eq!(p3, vec![true, false, false, false, false, false]);
 
-    let s4 = Some(String::from("no,none,off"));
-    let p4 = Training::partlist(&s4);
-    assert_eq!(p4, vec![false, false, false]);
+    // let s4 = Some(String::from("no,none,off"));
+    // let p4 = Training::partlist(&s4);
+    // assert_eq!(p4, vec![false, false, false]);
 
     let s5 = Some(String::from("no,none,a,0"));
     let p5 = Training::partlist(&s5);
-    assert_eq!(p5, vec![false, false, true]);
+    assert_eq!(p5, vec![false, false, true, false, true, true]);
 
     let s6 = Some(String::from("0,"));
     let p6 = Training::partlist(&s6);
-    assert_eq!(p6, vec![false, false, true]);
+    assert_eq!(p6, vec![false, false, true, true, true, true]);
 }
