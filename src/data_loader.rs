@@ -135,13 +135,15 @@ fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
         match line {
             Err(e) => {return Err(format!("{e}"))},
             Ok(l) => {
-                // コメント行 or 11文字未満
-                if l.len() < 11 || l.starts_with("#") {continue;}
+                // コメント行 or 7文字未満
+                if l.len() < 7 || l.starts_with("#") {continue;}
+
                 // rfen,score
                 let elem : Vec<&str> = l.split(",").collect();
                 if elem.len() < 2 {
                     return Err(format!("# of elem < 2 w/ {l}!"));
                 }
+
                 let ban = match bitboard::BitBoard::try_from(elem[0]) {
                     Ok(b) => {b},
                     Err(msg) => {
