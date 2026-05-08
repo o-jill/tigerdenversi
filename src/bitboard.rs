@@ -555,7 +555,7 @@ impl BitBoard {
     ///   - "8883Aa6aA8883 b"
     ///   - "hHlHdHhH w"
     #[allow(dead_code)]
-    fn to_string_short(&self) -> String {
+    pub fn to_string_short(&self) -> String {
         let black = self.black;
         let white = self.white;
         let mut bit : u64 = LSB_CELL;
