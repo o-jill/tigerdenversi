@@ -12,7 +12,7 @@ pub struct Training {
     trainingpart : Vec<bool>,
     kifudir : Vec<String>,
     matedir : Vec<String>,
-    matefiles : String,
+    matefiles : Vec<String>,
     devtype : String,
     device : tch::Device,
     autostop : Option<f64>,
@@ -32,7 +32,7 @@ pub struct Training {
     loss_curve : Vec<f64>,
     show_progressbar : bool,
     show_graph : bool,
-    large_dir : String,
+    large_dir : Vec<String>,
     large_ratio : [i32 ; 3],
 }
 
@@ -72,7 +72,7 @@ impl From<argument::Arg> for Training {
                 arg.kifudir
             };
         let matedir = arg.matedir;
-        let matefiles = arg.mate_file.unwrap_or_default();
+        let matefiles = arg.mate_file;
         let devtype = arg.device.unwrap_or("cpu".to_string());
         let devtype = devtype.clone();
         let device    = if devtype == "mps" && tch::utils::has_mps() {
@@ -91,7 +91,7 @@ impl From<argument::Arg> for Training {
                 panic!("{err}");
             }
         }
-        let large_dir = arg.large_dir.unwrap_or_default();
+        let large_dir = arg.large_dir;
         let mut large_ratio = [0 ; 3];
         if arg.large_ratio.len() == 3 {
             large_ratio.copy_from_slice(&arg.large_ratio);
@@ -270,7 +270,7 @@ impl Training {
         }
 
         if !self.matefiles.is_empty() {
-            let mut mates = self.matefiles.split(",").flat_map(
+            let mut mates = self.matefiles.iter().flat_map(
                 |path| {
                     if let Some(pb) = pb {pb.inc(1);}
                     match data_loader::load_mates(path, progress) {
@@ -279,7 +279,7 @@ impl Training {
                     }
                 }
             ).collect::<Vec<_>>();
-            self.putlog(&format!("mates : {} size:{}", self.matefiles, mates.len()));
+            self.putlog(&format!("mates : {:?} size:{}", self.matefiles, mates.len()));
             if !mates.is_empty() {boards.append(&mut mates);}
         }
 
@@ -571,12 +571,7 @@ impl Training {
                         {
                             let steps =
                                 self.matedir.len() + self.kifudir.len() + 7;
-                            if self.matefiles.is_empty() {
-                                steps
-                            } else {
-                                self.matefiles.chars().fold(steps + 1,
-                                |acc, c| if c == ',' {acc + 1} else {acc})
-                            }
+                            steps + self.matefiles.len()
                         } as u64));
                 pb.set_style(
                     ProgressStyle::with_template(
