@@ -32,6 +32,8 @@ pub struct Training {
     loss_curve : Vec<f64>,
     show_progressbar : bool,
     show_graph : bool,
+    large_dir : String,
+    large_ratio : [i32 ; 3],
 }
 
 impl std::fmt::Display for Training {
@@ -89,6 +91,11 @@ impl From<argument::Arg> for Training {
                 panic!("{err}");
             }
         }
+        let large_dir = arg.large_dir.unwrap_or_default();
+        let mut large_ratio = [0 ; 3];
+        if arg.large_ratio.len() == 3 {
+            large_ratio.copy_from_slice(&arg.large_ratio);
+        }
 
         Self {
             trainingpart : partlist,
@@ -116,6 +123,8 @@ impl From<argument::Arg> for Training {
                     weight::N_PROGRESS_DIV * (arg.warmup + arg.epoch)),
             show_progressbar : arg.progressbar,
             show_graph : arg.graph,
+            large_dir,
+            large_ratio
         }
     }
 }
