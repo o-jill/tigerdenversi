@@ -146,7 +146,7 @@ pub fn prepare_large_data(input_dir : &str, output_dir : &str, div_ratio : i32)
 ///   successfully done.
 /// - `Err(String)`
 ///   some error occurred.
-pub fn prepare_large_mate(input_dir : &str, input_files : &[String], output_dir : &str, div_ratio : i32)
+pub fn prepare_large_mate(input_dir : &[String], input_files : &[String], output_dir : &str, div_ratio : i32)
         -> Result<(), String> {
     if input_dir.is_empty() || output_dir.is_empty() {return Ok(());}
     if div_ratio == 0 {
@@ -202,15 +202,17 @@ pub fn prepare_large_mate(input_dir : &str, input_files : &[String], output_dir 
         }
     });
 
-    let files = find_mate_files(input_dir);
-    for fname in files {
-        let path = std::path::Path::new(dirpath).join(fname);
-        let content =
-            load_mates_all(path.to_str().unwrap())
-                .map_err(|e| format!("err:{e}"))?;
+    for inputdir in input_dir {
+        let files = find_mate_files(inputdir);
+        for fname in files {
+            let path = std::path::Path::new(dirpath).join(fname);
+            let content =
+                load_mates_all(path.to_str().unwrap())
+                    .map_err(|e| format!("err:{e}"))?;
 
-        // ファイルに出力する
-        tx.send(content).unwrap();
+            // ファイルに出力する
+            tx.send(content).unwrap();
+        }
     }
 
     for fname in input_files {
