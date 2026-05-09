@@ -29,6 +29,11 @@ pub fn clean_up_large_data(path : &str) -> Result<(), String> {
     Ok(())
 }
 
+pub fn gen_div_file_name(d : &std::path::Path, n : usize) -> std::path::PathBuf {
+    let fname = format!("kifu_div_{n:03}.txt");
+    d.join(fname)
+}
+
 /// read data and store into files.
 ///
 /// # Arguments
@@ -81,8 +86,7 @@ pub fn prepare_large_data(input_dir : &str, output_dir : &str, div_ratio : i32)
                 const LIMIT_SIZE : usize = 1024 * 50;
                 if buffers[n].len() < LIMIT_SIZE {continue;}
 
-                let fname = format!("kifu_div_{n:03}.txt");
-                let filepath = dirpath.join(fname);
+                let filepath = gen_div_file_name(dirpath, n);
                 let mut f = std::fs::OpenOptions::new()
                     .create(true).append(true).open(filepath).unwrap();
                 f.write_all(buffers[n].as_bytes()).unwrap();
