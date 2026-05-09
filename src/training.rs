@@ -7,6 +7,12 @@ use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
 const MIN_COSANEAL : f64 = 1e-4;
+enum LargeRatio {
+    pub IndexDiv = 0,
+    pub IndexTrain = 1,
+    pub IndexEval = 2,
+    pub IndexSize = 3,
+}
 
 pub struct Training {
     trainingpart : Vec<bool>,
@@ -32,8 +38,8 @@ pub struct Training {
     loss_curve : Vec<f64>,
     show_progressbar : bool,
     show_graph : bool,
-    large_dir : Vec<String>,
-    large_ratio : [i32 ; 3],
+    large_dir : String,
+    large_ratio : [i32 ; LargeRatio::IndexSize as usize],
 }
 
 impl std::fmt::Display for Training {
@@ -91,9 +97,9 @@ impl From<argument::Arg> for Training {
                 panic!("{err}");
             }
         }
-        let large_dir = arg.large_dir;
+        let large_dir = arg.large_dir.unwrap_or_default();
         let mut large_ratio = [0 ; 3];
-        if arg.large_ratio.len() == 3 {
+        if arg.large_ratio.len() == LargeRatio::IndexSize as usize {
             large_ratio.copy_from_slice(&arg.large_ratio);
         }
 

@@ -62,8 +62,8 @@ pub struct Arg {
     #[arg(long, value_delimiter=',')]
     pub mate_file : Vec<String>,
     /// generate divided training dataset in this directory
-    #[arg(long, value_delimiter=',')]
-    pub large_dir : Vec<String>,
+    #[arg(long)]
+    pub large_dir : Option<String>,
     /// # of devision, # for training and # for loss evaluation for large training dataset.
     #[arg(long, value_delimiter=',')]
     pub large_ratio : Vec<i32>,
