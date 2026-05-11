@@ -55,7 +55,7 @@ impl Part {
 }
 
 pub struct Training {
-    trainingpart : Vec<bool>,
+    trainingpart : Vec<Part>,
     kifudir : Vec<String>,
     matedir : Vec<String>,
     matefiles : Vec<String>,
@@ -192,25 +192,19 @@ impl Training {
     /// ex. "" becomes [true, true, true]
     /// ex. "1,,0" becomes [true, false, false]
     /// ex. "-1,false,zero" becomes [true, false, false]
-    fn partlist(part : &Option<String>) -> Vec<bool> {
-        let mut ret = vec![true ; weight::N_PROGRESS_DIV];
+    fn partlist(part : &Option<String>) -> Vec<Part> {
+        let mut ret = vec![Part::On ; weight::N_PROGRESS_DIV];
         if part.is_none() {return ret;}
 
         let txt = part.as_ref().unwrap();
         if txt.is_empty() {return ret;}
 
-        let disable = [/*"", */"0", "false", "no", "none", "off", "zero"];
-        let txt_lo = txt.to_lowercase();
         // println!("txt_lo:{txt_lo}, txt:[{txt}]");
-        for (i, elem) in txt_lo.split(',').enumerate() {
+        for (i, elem) in txt.split(',').enumerate() {
             // println!("elem:[{elem}]");
             if i >= weight::N_PROGRESS_DIV {break;}
-            if elem.is_empty() {
-                ret[i] = false;
-                continue;
-            }
 
-            ret[i] = !disable.contains(&elem);
+            ret[i] = elem.into();
         }
         ret
     }
@@ -493,12 +487,16 @@ impl Training {
 
         for wep in 0..self.warmup {
             let (train_idx, eval_idx) = self.gen_largedata_index();
-            {
-                let (inputs, targets) = self.prepare_large_dataset(&train_idx, progress, &pb);
 
-                let w_eta_min = self.eta * MIN_COSANEAL;
-                let a = (self.eta - w_eta_min) / self.warmup as f64;
-                optm.set_lr(w_eta_min + a * wep as f64);
+            let eta = self.eta;
+            let w_eta_min = eta * MIN_COSANEAL;
+            let a = (eta - w_eta_min) / self.warmup as f64;
+            optm.set_lr(w_eta_min + a * wep as f64);
+
+            for i in 0..train_idx.len() {
+                let (inputs, targets) =
+                    self.prepare_large_dataset(
+                        &train_idx[i..i + 1], progress, &pb);
 
                 let mut dataset = Iter2::new(&inputs, &targets, minibatch);
                 let dataset = dataset.shuffle().to_device(vs.device());
@@ -645,6 +643,116 @@ impl Training {
         }
     }
 
+    fn cos_anealing_sequence_large(&mut self, nnet : &impl nn::Module,
+            vs : &mut VarStore, optm : &mut tch::nn::Optimizer,
+            minibatch : i64, progress : usize) {
+        let pb = if self.show_progressbar {
+            let pb = self.multibar.add(
+            ProgressBar::new(self.epoch as u64));
+            pb.set_style(
+                ProgressStyle::with_template(
+                "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
+                .progress_chars("📗📖📓"));
+            Some(pb)
+        } else {
+            None
+        };
+        let mut sum_loss_prev = 99999999.9;
+        let mut sum_loss = 0.0;
+        let mut final_loss = 0f64;
+        let testratio = self.testratio as usize;
+        let mut actual_epochs = self.epoch;
+        self.anealing_step = 0;
+        for ep in 0..self.epoch * 2 {
+            let (train_idx, eval_idx) = self.gen_largedata_index();
+
+            let iloss = if testratio > 1 {ep % testratio} else {99999};
+            let (new_lr, next_step) = self.anealing_learning_rate(ep);
+            // stop automatically after desinated epoch
+            // and after learning w/ minimum learning rate.
+            if next_step && ep >= self.epoch {
+                actual_epochs = ep;
+                // self.putlog(&format!(
+                //     "next_step && ep >= self.epoch: {next_step} {ep}"));
+                break;
+            }
+
+            optm.set_lr(new_lr);
+            for i in 0..train_idx.len() {
+                let (inputs, targets) =
+                    self.prepare_large_dataset(
+                        &train_idx[i..i + 1], progress, &pb);
+
+                let mut dataset = Iter2::new(&inputs, &targets, minibatch);
+                // let dataset = dataset.shuffle();
+                let dataset = dataset.shuffle().to_device(vs.device());
+                for (xs, ys) in dataset {
+                    // println!("xs: {} {:?} ys: {} {:?}",
+                    //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                    let loss =
+                        nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                    optm.backward_step(&loss);
+                }
+            }
+            let testloss = if eval_idx.is_empty() {
+                    0f64
+                } else {
+                    let (inputs, targets) =
+                        self.prepare_large_dataset(&eval_idx, progress, &pb);
+                    let loss = nnet.forward(&inputs)
+                            .mse_loss(&targets, tch::Reduction::Mean);
+                    loss.double_value(&[])
+                };
+            let elapsed = self.elapsed();
+            final_loss = testloss;
+            self.loss_curve.push(testloss);
+            self.update(testloss, &pb, ep + self.warmup, elapsed);
+            // 学習を始めたけどロスが大きいときはなにかおかしい
+            if ep >  5 {
+                // 少なくとも300を超えてるときはおかしい
+                const WARNING_THRESHOLD : f64 = 300f64;
+                if testloss > WARNING_THRESHOLD {
+                    let msg = format!("loss:{testloss}, ep:{ep}, lr:{new_lr}");
+                    eprintln!("{msg}");
+                    self.putlog(&msg);
+                    let msg = format!(
+                        "ep: {ep} iloss: {iloss} input_mean: ??? target_mean: ???");
+                    // let msg = format!(
+                    //     "ep: {ep} iloss: {iloss} input_mean: {:.3} target_mean: {:.3}",
+                    //     inputs[iloss].mean(Kind::Float).double_value(&[]),
+                    //     targets[iloss].mean(Kind::Float).double_value(&[]));
+                    eprintln!("{msg}");
+                    self.putlog(&msg);
+                    // panic!("{msg}");
+                }
+            }
+
+            if self.autostop.is_none() {continue;}
+
+            let threshold = self.autostop.unwrap();
+            sum_loss += testloss;
+            let testratio = self.testratio;
+            if (ep + 1) % (testratio as i32 * self.period) as usize == 0 {
+                let msg = format!("sum_loss{}:{sum_loss}", ep + 1);
+                self.putlog(&msg);
+
+                if  sum_loss_prev - sum_loss > threshold {
+                    sum_loss_prev = sum_loss;
+                    sum_loss = 0.0;
+                } else {
+                    println!("done as a result of learning enough.");
+                    break;
+                }
+            }
+        }
+        if let Some(pb) = pb {
+            pb.set_length(actual_epochs as u64);
+            pb.set_position(actual_epochs as u64);
+            pb.finish_with_message(
+                format!("cos anealing - done! final loss:{final_loss:.3}"));
+        }
+    }
+
     fn std_sequence(&mut self, nnet : &impl nn::Module,
             vs : &mut VarStore, optm : &mut tch::nn::Optimizer,
             inputs : &[Tensor], targets : &[Tensor], minibatch : i64) {
@@ -690,6 +798,58 @@ impl Training {
         }
     }
 
+    fn std_sequence_large(&mut self, nnet : &impl nn::Module,
+            vs : &mut VarStore, optm : &mut tch::nn::Optimizer,
+            minibatch : i64, progress : usize) {
+        let pb = if self.show_progressbar {
+            let pb = self.multibar.add(
+            ProgressBar::new(self.epoch as u64));
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}] {wide_bar} [{eta_precise}] {pos}/{len} {msg}").unwrap()
+                .progress_chars("📗📖📓"));
+            Some(pb)
+        } else {
+            None
+        };
+        let testratio = self.testratio as usize;
+        for ep in 0..self.epoch {
+            let iloss = if testratio > 1 {ep % testratio} else {99999};
+
+            let (train_idx, eval_idx) = self.gen_largedata_index();
+
+            for i in 0..train_idx.len() {
+                let (inputs, targets) =
+                    self.prepare_large_dataset(
+                        &train_idx[i..i + 1], progress, &pb);
+
+                let mut dataset = Iter2::new(&inputs, &targets, minibatch);
+                // let dataset = dataset.shuffle();
+                let dataset = dataset.shuffle().to_device(vs.device());
+                // let mut loss = tch::Tensor::new();
+                for (xs, ys) in dataset {
+                    // println!("xs: {} {:?} ys: {} {:?}",
+                    //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                    let loss =
+                        nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                    optm.backward_step(&loss);
+                }
+            }
+            let testloss = if testratio == 0 {
+                0f64
+            } else {
+                let (inputs, targets) =
+                    self.prepare_large_dataset(&eval_idx, progress, &pb);
+                let loss = nnet.forward(&inputs)
+                        .mse_loss(&targets, tch::Reduction::Mean);
+                loss.double_value(&[])
+            };
+            let elapsed = self.elapsed();
+            self.loss_curve.push(testloss);
+            self.update(testloss, &pb, ep, elapsed);
+        }
+    }
+
     fn start_time(&mut self) {
         self.stopwatch = std::time::Instant::now();
     }
@@ -722,11 +882,38 @@ impl Training {
     }
 
     pub fn run(&mut self) -> Result<(), tch::TchError> {
-        if self.is_large_data_mode() {
-            self.run_large_dataset()
+        let pbtop = if self.show_progressbar {
+            let pb = self.multibar.add(
+            ProgressBar::new(weight::N_PROGRESS_DIV as u64));
+            Some(pb)
         } else {
-            self.run_normal()
+            None
+        };
+
+        let partlist = self.trainingpart.clone();
+        for (progress, p) in partlist.iter().enumerate() {
+            if let Some(pb ) = &pbtop {pb.inc(1);}
+
+            if p.is_Off() {
+                let msg = format!("progress[{progress}] skipped.");
+                println!("{msg}");
+                self.putlog(&msg);
+                continue;
+            }
+
+            if p.is_Large() && self.is_large_data_mode() {
+                self.run_large_dataset(progress, &pbtop)?;
+            } else {
+                self.run_normal(progress, &pbtop)?;
+            }
         }
+        if let Some(pb ) = &pbtop {pb.finish();}
+
+        neuralnet::writeweights(&self.weights);
+
+        self.plot_loss();
+
+        Ok(())
     }
 
     fn split_large_dataset(&self) -> Result<(), String> {
@@ -749,221 +936,183 @@ impl Training {
     }
 
     /// 学習データを複数のファイルに分割してから学習するモード
-    fn run_large_dataset(&mut self) -> Result<(), tch::TchError> {
-        let pbtop = if self.show_progressbar {
-            let pb = self.multibar.add(
-            ProgressBar::new(weight::N_PROGRESS_DIV as u64 + 1));
-            pb.set_style(
-                ProgressStyle::with_template(
-                    "{wide_bar} {msg} {pos}/{len} [{elapsed_precise}]").unwrap()
-                .progress_chars("🪵🪓🌴"));
-            pb.set_message("loading large data...");
-            Some(pb)
-        } else {
-            None
-        };
+    fn run_large_dataset(&mut self, progress : usize, pbtop : &Option<ProgressBar>) -> Result<(), tch::TchError> {
+        // let pbtop = if self.show_progressbar {
+        //     let pb = self.multibar.add(
+        //     ProgressBar::new(weight::N_PROGRESS_DIV as u64 + 1));
+        //     pb.set_style(
+        //         ProgressStyle::with_template(
+        //             "{wide_bar} {msg} {pos}/{len} [{elapsed_precise}]").unwrap()
+        //         .progress_chars("🪵🪓🌴"));
+        //     pb.set_message("loading large data...");
+        //     Some(pb)
+        // } else {
+        //     None
+        // };
 
         // prepare dataset
         self.split_large_dataset().map_err(|e| tch::TchError::Torch(e))?;
 
-        if let Some(pb ) = &pbtop {pb.inc(1);}
+        if let Some(pb ) = pbtop {pb.inc(1);}
 
         self.anealing_step = 0;
 
-        let trainingpart = self.trainingpart.clone();
-
-        for (progress, en) in trainingpart.iter().enumerate() {
-            if let Some(pb ) = &pbtop {pb.inc(1);}
-            if !*en {
-                let msg = format!("progress[{progress}] skipped.");
-                println!("{msg}");
-                self.putlog(&msg);
-                continue;
-            }
-            let pbchild = if self.show_progressbar {
-                let pb = self.multibar.add(
-                    ProgressBar::new(
-                        {
-                            let steps =
-                                self.matedir.len() + self.kifudir.len() + 7;
-                            steps + self.matefiles.len()
-                        } as u64));
-                pb.set_style(
-                    ProgressStyle::with_template(
-                        "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
-                    .progress_chars("🪵🪓🌴"));
-                pb.set_message("loading data...");
-                Some(pb)
-            } else {
-                None
-            };
-
-            // let (train_idx, eval_idx) = self.gen_largedata_index();
-            // let input = self.prepare_large_dataset(&train_idx, progress, &pbchild);
-            if let Some(pb) = &pbchild {pb.inc(1);}
-
-            let mut vs = VarStore::new(self.device);
-            let nnet = neuralnet::net(&vs.root());
-
-            if let Err(err) = neuralnet::load(&mut vs, &self.weights, progress) {
-                panic!("{err}");
-            }
-
-            if let Some(pb) = &pbchild {pb.inc(1);}
-            let mut optm = nn::AdamW::default().build(&vs, self.eta)?;
-            optm.set_weight_decay(self.wdecay);
-
-            self.putlog(&
-                vs.variables().iter().map(|(key, t)| {
-                    format!("{key}:{:?}\n", t.size())
-                }).collect::<Vec<String>>().join(""));
-            let datasize = 0;  // target.size()[0];
-
-            let minibatch = self.adjust_minibatch(datasize);
-
-            let msg = format!("auto stop:{:?}\n", self.autostop)
-                + &format!("datasize: {datasize}\n")
-                + &format!("devtype: {}\n", self.devtype)
-                + &format!("cosine aneaing:{}\n", self.period)
-                + &format!("epoch:{}\n", self.epoch)
-                + &format!("eta:{}\n", self.eta)
-                + &format!("mini batch: {minibatch}\n")
-                + &format!("test ratio:{}\n", self.testratio)
-                + &format!("training part: {:?}\n", self.trainingpart)
-                + &format!("warmup: {}\n", self.warmup)
-                + &format!("weight decay:{}\n", self.wdecay);
-            self.putlog(&msg);
-            if let Some(pb) = &pbchild {
-                pb.finish_with_message(
-                    format!("preparing {progress} - done!"));
-            }
-
-            self.start_time();
-
-            if self.is_cos_anealing() {  // cos anealing
-                self.warmup_sequence_large(
-                    &nnet, &mut vs, &mut optm, minibatch, progress);
-
-                self.cos_anealing_sequence_large(
-                    &nnet, &mut vs, &mut optm, minibatch, progress);
-            } else {
-                self.std_sequence_large(
-                    &nnet, &mut vs, &mut optm, minibatch, progress);
-            }
-            // println!();
-
-            // VarStore to weights
-            neuralnet::storeweights(&mut self.weights, vs, progress);
-        }
-        if let Some(pb ) = &pbtop {pb.finish();}
-
-        neuralnet::writeweights(&self.weights);
-
-        self.plot_loss();
-
-        Ok(())
-    }
-
-    fn run_normal(&mut self) -> Result<(), tch::TchError> {
-        let pbtop = if self.show_progressbar {
+        let pbchild = if pbtop.is_some() {
             let pb = self.multibar.add(
-            ProgressBar::new(weight::N_PROGRESS_DIV as u64));
+                ProgressBar::new(
+                    {
+                        let steps =
+                            self.matedir.len() + self.kifudir.len() + 7;
+                        steps + self.matefiles.len()
+                    } as u64));
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
+                .progress_chars("🪵🪓🌴"));
+            pb.set_message("loading data...");
             Some(pb)
         } else {
             None
         };
 
+        // let (train_idx, eval_idx) = self.gen_largedata_index();
+        // let input = self.prepare_large_dataset(&train_idx, progress, &pbchild);
+        if let Some(pb) = &pbchild {pb.inc(1);}
+
+        let mut vs = VarStore::new(self.device);
+        let nnet = neuralnet::net(&vs.root());
+
+        if let Err(err) = neuralnet::load(&mut vs, &self.weights, progress) {
+            panic!("{err}");
+        }
+
+        if let Some(pb) = &pbchild {pb.inc(1);}
+        let mut optm = nn::AdamW::default().build(&vs, self.eta)?;
+        optm.set_weight_decay(self.wdecay);
+
+        self.putlog(&
+            vs.variables().iter().map(|(key, t)| {
+                format!("{key}:{:?}\n", t.size())
+            }).collect::<Vec<String>>().join(""));
+        let datasize = 0;  // target.size()[0];
+
+        let minibatch = self.adjust_minibatch(datasize);
+
+        let msg = format!("auto stop:{:?}\n", self.autostop)
+            + &format!("datasize: {datasize}\n")
+            + &format!("devtype: {}\n", self.devtype)
+            + &format!("cosine aneaing:{}\n", self.period)
+            + &format!("epoch:{}\n", self.epoch)
+            + &format!("eta:{}\n", self.eta)
+            + &format!("mini batch: {minibatch}\n")
+            + &format!("test ratio:{}\n", self.testratio)
+            + &format!("training part: {:?}\n", self.trainingpart)
+            + &format!("warmup: {}\n", self.warmup)
+            + &format!("weight decay:{}\n", self.wdecay);
+        self.putlog(&msg);
+        if let Some(pb) = &pbchild {
+            pb.finish_with_message(
+                format!("preparing {progress} - done!"));
+        }
+
+        self.start_time();
+
+        if self.is_cos_anealing() {  // cos anealing
+            self.warmup_sequence_large(
+                &nnet, &mut vs, &mut optm, minibatch, progress);
+
+            self.cos_anealing_sequence_large(
+                &nnet, &mut vs, &mut optm, minibatch, progress);
+        } else {
+            self.std_sequence_large(
+                &nnet, &mut vs, &mut optm, minibatch, progress);
+        }
+        // println!();
+
+        // VarStore to weights
+        neuralnet::storeweights(&mut self.weights, vs, progress);
+
+        Ok(())
+    }
+
+    fn run_normal(&mut self, progress : usize, pbtop : &Option<ProgressBar>)
+             -> Result<(), tch::TchError> {
         self.anealing_step = 0;
 
-        let trainingpart = self.trainingpart.clone();
-        for (progress, en) in trainingpart.iter().enumerate() {
-            if let Some(pb ) = &pbtop {pb.inc(1);}
-            if !*en {
-                let msg = format!("progress[{progress}] skipped.");
-                println!("{msg}");
-                self.putlog(&msg);
-                continue;
-            }
-            let pbchild = if self.show_progressbar {
-                let pb = self.multibar.add(
-                    ProgressBar::new(
-                        {
-                            let steps =
-                                self.matedir.len() + self.kifudir.len() + 7;
-                            steps + self.matefiles.len()
-                        } as u64));
-                pb.set_style(
-                    ProgressStyle::with_template(
-                        "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
-                    .progress_chars("🪵🪓🌴"));
-                pb.set_message("loading data...");
-                Some(pb)
-            } else {
-                None
-            };
-            let (input, target) = self.prepare_data(progress, &pbchild);
-            let inputs = input.chunk(self.testratio, 0);
-            let targets = target.chunk(self.testratio, 0);
-            if let Some(pb) = &pbchild {pb.inc(1);}
+        let pbchild = if pbtop.is_some() {
+            let pb = self.multibar.add(
+                ProgressBar::new(
+                    {
+                        let steps =
+                            self.matedir.len() + self.kifudir.len() + 7;
+                        steps + self.matefiles.len()
+                    } as u64));
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
+                .progress_chars("🪵🪓🌴"));
+            pb.set_message("loading data...");
+            Some(pb)
+        } else {
+            None
+        };
+        let (input, target) = self.prepare_data(progress, &pbchild);
+        let inputs = input.chunk(self.testratio, 0);
+        let targets = target.chunk(self.testratio, 0);
+        if let Some(pb) = &pbchild {pb.inc(1);}
 
-            let mut vs = VarStore::new(self.device);
-            let nnet = neuralnet::net(&vs.root());
+        let mut vs = VarStore::new(self.device);
+        let nnet = neuralnet::net(&vs.root());
 
-            if let Err(err) = neuralnet::load(&mut vs, &self.weights, progress) {
-                panic!("{err}");
-            }
-
-            if let Some(pb) = &pbchild {pb.inc(1);}
-            let mut optm = nn::AdamW::default().build(&vs, self.eta)?;
-            optm.set_weight_decay(self.wdecay);
-
-            self.putlog(&
-                vs.variables().iter().map(|(key, t)| {
-                    format!("{key}:{:?}\n", t.size())
-                }).collect::<Vec<String>>().join(""));
-            let datasize = target.size()[0];
-            
-            let minibatch = self.adjust_minibatch(datasize);
-            
-            let msg = format!("auto stop:{:?}\n", self.autostop)
-                + &format!("datasize: {datasize}\n")
-                + &format!("devtype: {}\n", self.devtype)
-                + &format!("cosine aneaing:{}\n", self.period)
-                + &format!("epoch:{}\n", self.epoch)
-                + &format!("eta:{}\n", self.eta)
-                + &format!("mini batch: {minibatch}\n")
-                + &format!("test ratio:{}\n", self.testratio)
-                + &format!("training part: {:?}\n", self.trainingpart)
-                + &format!("warmup: {}\n", self.warmup)
-                + &format!("weight decay:{}\n", self.wdecay);
-            self.putlog(&msg);
-            if let Some(pb) = &pbchild {
-                pb.finish_with_message(
-                    format!("preparing {progress} - done!"));
-            }
-
-            self.start_time();
-
-            if self.is_cos_anealing() {  // cos anealing
-                self.warmup_sequence(
-                    &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
-
-                self.cos_anealing_sequence(
-                    &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
-            } else {
-                self.std_sequence(
-                    &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
-            }
-            // println!();
-
-            // VarStore to weights
-            neuralnet::storeweights(&mut self.weights, vs, progress);
+        if let Err(err) = neuralnet::load(&mut vs, &self.weights, progress) {
+            panic!("{err}");
         }
-        if let Some(pb ) = &pbtop {pb.finish();}
 
-        neuralnet::writeweights(&self.weights);
+        if let Some(pb) = &pbchild {pb.inc(1);}
+        let mut optm = nn::AdamW::default().build(&vs, self.eta)?;
+        optm.set_weight_decay(self.wdecay);
 
-        self.plot_loss();
+        self.putlog(&
+            vs.variables().iter().map(|(key, t)| {
+                format!("{key}:{:?}\n", t.size())
+            }).collect::<Vec<String>>().join(""));
+        let datasize = target.size()[0];
+        
+        let minibatch = self.adjust_minibatch(datasize);
+        
+        let msg = format!("auto stop:{:?}\n", self.autostop)
+            + &format!("datasize: {datasize}\n")
+            + &format!("devtype: {}\n", self.devtype)
+            + &format!("cosine aneaing:{}\n", self.period)
+            + &format!("epoch:{}\n", self.epoch)
+            + &format!("eta:{}\n", self.eta)
+            + &format!("mini batch: {minibatch}\n")
+            + &format!("test ratio:{}\n", self.testratio)
+            + &format!("training part: {:?}\n", self.trainingpart)
+            + &format!("warmup: {}\n", self.warmup)
+            + &format!("weight decay:{}\n", self.wdecay);
+        self.putlog(&msg);
+        if let Some(pb) = &pbchild {
+            pb.finish_with_message(
+                format!("preparing {progress} - done!"));
+        }
+
+        self.start_time();
+
+        if self.is_cos_anealing() {  // cos anealing
+            self.warmup_sequence(
+                &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
+
+            self.cos_anealing_sequence(
+                &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
+        } else {
+            self.std_sequence(
+                &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
+        }
+        // println!();
+
+        // VarStore to weights
+        neuralnet::storeweights(&mut self.weights, vs, progress);
 
         Ok(())
     }
