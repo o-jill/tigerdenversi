@@ -937,19 +937,6 @@ impl Training {
 
     /// 学習データを複数のファイルに分割してから学習するモード
     fn run_large_dataset(&mut self, progress : usize, pbtop : &Option<ProgressBar>) -> Result<(), tch::TchError> {
-        // let pbtop = if self.show_progressbar {
-        //     let pb = self.multibar.add(
-        //     ProgressBar::new(weight::N_PROGRESS_DIV as u64 + 1));
-        //     pb.set_style(
-        //         ProgressStyle::with_template(
-        //             "{wide_bar} {msg} {pos}/{len} [{elapsed_precise}]").unwrap()
-        //         .progress_chars("🪵🪓🌴"));
-        //     pb.set_message("loading large data...");
-        //     Some(pb)
-        // } else {
-        //     None
-        // };
-
         // prepare dataset
         self.split_large_dataset().map_err(|e| tch::TchError::Torch(e))?;
 
@@ -975,8 +962,6 @@ impl Training {
             None
         };
 
-        // let (train_idx, eval_idx) = self.gen_largedata_index();
-        // let input = self.prepare_large_dataset(&train_idx, progress, &pbchild);
         if let Some(pb) = &pbchild {pb.inc(1);}
 
         let mut vs = VarStore::new(self.device);
@@ -1027,7 +1012,6 @@ impl Training {
             self.std_sequence_large(
                 &nnet, &mut vs, &mut optm, minibatch, progress);
         }
-        // println!();
 
         // VarStore to weights
         neuralnet::storeweights(&mut self.weights, vs, progress);
@@ -1109,7 +1093,6 @@ impl Training {
             self.std_sequence(
                 &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
         }
-        // println!();
 
         // VarStore to weights
         neuralnet::storeweights(&mut self.weights, vs, progress);
