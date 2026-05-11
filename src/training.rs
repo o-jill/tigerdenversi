@@ -8,10 +8,50 @@ use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
 const MIN_COSANEAL : f64 = 1e-4;
 enum LargeRatio {
-    pub IndexDiv = 0,
-    pub IndexTrain = 1,
-    pub IndexEval = 2,
-    pub IndexSize = 3,
+    IndexDiv = 0,
+    IndexTrain = 1,
+    IndexEval = 2,
+    IndexSize = 3,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum Part {
+    Off = 0,
+    On = 1,
+    Large = 2,
+}
+
+impl std::convert::From<&str> for Part {
+    fn from(txt: &str) -> Self {
+        if txt.is_empty() {return Part::Off;}
+
+        let disable = [/*"", */"0", "false", "no", "none", "off", "zero"];
+        let large = "large";
+
+        let txt_lo = txt.to_lowercase();
+
+        if disable.contains(&txt_lo.as_str()) {
+            Part::Off
+        } else if txt_lo == large {
+            Part::Large
+        } else {
+            Part::On
+        }
+    }
+}
+
+impl Part {
+    pub fn is_Off(&self) -> bool {
+        *self == Part::Off
+    }
+
+    pub fn is_On(&self) -> bool {
+        *self == Part::On
+    }
+
+    pub fn is_Large(&self) -> bool {
+        *self == Part::Large
+    }
 }
 
 pub struct Training {
