@@ -1027,25 +1027,35 @@ fn test_partlist() {
 
     let s1 = Some(String::new());
     let p1 = Training::partlist(&s1);
-    assert_eq!(p1, vec![true, true, true, true, true, true]);
+    assert_eq!(
+        p1, vec![Part::On, Part::On, Part::On, Part::On, Part::On, Part::On]);
 
     let s2 = Some(String::from("1,,0"));
     let p2 = Training::partlist(&s2);
-    assert_eq!(p2, vec![true, false, false, true, true, true]);
+    assert_eq!(p2,
+        vec![Part::On, Part::Off, Part::Off, Part::On, Part::On, Part::On]);
 
     let s3 = Some(String::from("-1,false,zero,no,none,off"));
     let p3 = Training::partlist(&s3);
-    assert_eq!(p3, vec![true, false, false, false, false, false]);
+    assert_eq!(p3,
+        vec![Part::On, Part::Off, Part::Off, Part::Off, Part::Off, Part::Off]);
 
     // let s4 = Some(String::from("no,none,off"));
     // let p4 = Training::partlist(&s4);
-    // assert_eq!(p4, vec![false, false, false]);
+    // assert_eq!(p4, vec![Part::Off, Part::Off, Part::Off]);
 
     let s5 = Some(String::from("no,none,a,0"));
     let p5 = Training::partlist(&s5);
-    assert_eq!(p5, vec![false, false, true, false, true, true]);
+    assert_eq!(p5,
+        vec![Part::Off, Part::Off, Part::On, Part::Off, Part::On, Part::On]);
 
     let s6 = Some(String::from("0,"));
     let p6 = Training::partlist(&s6);
-    assert_eq!(p6, vec![false, false, true, true, true, true]);
+    assert_eq!(p6,
+        vec![Part::Off, Part::Off, Part::On, Part::On, Part::On, Part::On]);
+
+    let s7 = Some(String::from(",,,,large,large"));
+    let p7 = Training::partlist(&s7);
+    assert_eq!(p7,
+        vec![Part::Off, Part::Off, Part::Off, Part::Off, Part::Large, Part::Large]);
 }
