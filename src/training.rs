@@ -866,6 +866,10 @@ impl Training {
         && self.large_ratio[LargeRatio::IndexEval as usize] > 0  // 1つは絶対に必要
     }
 
+    /// generate indexes for training and loss evaluation.
+    ///
+    /// # Returns
+    /// (indexes for training, indexes for loss evaluation)
     fn gen_largedata_index(&self) -> (Vec<usize>, Vec<usize>) {
         let div_ratio = self.large_ratio[LargeRatio::IndexDiv as usize] as usize;
         let train_file_size = self.large_ratio[LargeRatio::IndexTrain as usize] as usize;
@@ -881,6 +885,7 @@ impl Training {
         (train_idx, eval_idx)
     }
 
+    /// run training
     pub fn run(&mut self) -> Result<(), tch::TchError> {
         let pbtop = if self.show_progressbar {
             let pb = self.multibar.add(
@@ -916,6 +921,13 @@ impl Training {
         Ok(())
     }
 
+    /// clean-up destination directory, load kifu and mate files
+    /// and separate them into files.
+    ///
+    /// - destination directory: `self.large_dir`
+    /// - source kifu files: `self.kifudir`
+    /// - mate files: `self.matedir` and`self.matefiles`
+    /// - \# of division: `self.large_ratio[LargeRatio::IndexDiv]`
     fn split_large_dataset(&self) -> Result<(), String> {
         // clean up
         data_loader::clean_up_large_data(&self.large_dir)?;
@@ -936,7 +948,13 @@ impl Training {
     }
 
     /// 学習データを複数のファイルに分割してから学習するモード
-    fn run_large_dataset(&mut self, progress : usize, pbtop : &Option<ProgressBar>) -> Result<(), tch::TchError> {
+    ///
+    /// # Arguments
+    /// - `progress`: progress of the game.
+    /// - `pbtop`: progressbar
+    fn run_large_dataset(
+        &mut self, progress : usize, pbtop : &Option<ProgressBar>)
+            -> Result<(), tch::TchError> {
         // prepare dataset
         self.split_large_dataset().map_err(|e| tch::TchError::Torch(e))?;
 
@@ -1019,6 +1037,11 @@ impl Training {
         Ok(())
     }
 
+    /// 一括でデータを読み込んでおいてそれを学習するモード
+    ///
+    /// # Arguments
+    /// - `progress`: progress of the game.
+    /// - `pbtop`: progressbar
     fn run_normal(&mut self, progress : usize, pbtop : &Option<ProgressBar>)
              -> Result<(), tch::TchError> {
         self.anealing_step = 0;
