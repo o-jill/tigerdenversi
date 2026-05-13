@@ -7,11 +7,11 @@ use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
 const MIN_COSANEAL : f64 = 1e-4;
-enum LargeRatio {
-    IndexDiv = 0,
-    IndexTrain = 1,
-    IndexEval = 2,
-    IndexSize = 3,
+enum LargeRatioIndex {
+    Div = 0,
+    Train = 1,
+    Eval = 2,
+    Size = 3,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -41,15 +41,16 @@ impl std::convert::From<&str> for Part {
 }
 
 impl Part {
-    pub fn is_Off(&self) -> bool {
+    pub fn is_off(&self) -> bool {
         *self == Part::Off
     }
 
-    pub fn is_On(&self) -> bool {
+    #[allow(dead_code)]
+    pub fn is_on(&self) -> bool {
         *self == Part::On
     }
 
-    pub fn is_Large(&self) -> bool {
+    pub fn is_large(&self) -> bool {
         *self == Part::Large
     }
 }
@@ -79,7 +80,7 @@ pub struct Training {
     show_progressbar : bool,
     show_graph : bool,
     large_dir : String,
-    large_ratio : [i32 ; LargeRatio::IndexSize as usize],
+    large_ratio : [i32 ; LargeRatioIndex::Size as usize],
 }
 
 impl std::fmt::Display for Training {
@@ -139,7 +140,7 @@ impl From<argument::Arg> for Training {
         }
         let large_dir = arg.large_dir.unwrap_or_default();
         let mut large_ratio = [0 ; 3];
-        if arg.large_ratio.len() == LargeRatio::IndexSize as usize {
+        if arg.large_ratio.len() == LargeRatioIndex::Size as usize {
             large_ratio.copy_from_slice(&arg.large_ratio);
         }
 
@@ -814,8 +815,6 @@ impl Training {
         };
         let testratio = self.testratio as usize;
         for ep in 0..self.epoch {
-            let iloss = if testratio > 1 {ep % testratio} else {99999};
-
             let (train_idx, eval_idx) = self.gen_largedata_index().unwrap();
 
             for i in 0..train_idx.len() {
@@ -860,9 +859,9 @@ impl Training {
 
     /// 学習データを複数のファイルに分割してから学習を始めるかどうか
     fn is_large_data_mode(&self) -> bool {
-        let div = self.large_ratio[LargeRatio::IndexDiv as usize];
-        let train = self.large_ratio[LargeRatio::IndexTrain as usize];
-        let eval = self.large_ratio[LargeRatio::IndexEval as usize];
+        let div = self.large_ratio[LargeRatioIndex::Div as usize];
+        let train = self.large_ratio[LargeRatioIndex::Train as usize];
+        let eval = self.large_ratio[LargeRatioIndex::Eval as usize];
         !self.large_dir.is_empty()  // 出力先の指定あり
             && div > 1  // 2つ以上に分ける
             && train > 0  // 1つは絶対に必要
@@ -876,11 +875,11 @@ impl Training {
     /// (indexes for training, indexes for loss evaluation)
     fn gen_largedata_index(&self) -> Option<(Vec<usize>, Vec<usize>)> {
         let div_ratio =
-            self.large_ratio[LargeRatio::IndexDiv as usize] as usize;
+            self.large_ratio[LargeRatioIndex::Div as usize] as usize;
         let train_file_size =
-            self.large_ratio[LargeRatio::IndexTrain as usize] as usize;
+            self.large_ratio[LargeRatioIndex::Train as usize] as usize;
         let eval_file_size =
-            self.large_ratio[LargeRatio::IndexEval as usize] as usize;
+            self.large_ratio[LargeRatioIndex::Eval as usize] as usize;
 
         if div_ratio == 0 || div_ratio < train_file_size + eval_file_size {
             return None;
@@ -910,14 +909,14 @@ impl Training {
         for (progress, p) in partlist.iter().enumerate() {
             if let Some(pb ) = &pbtop {pb.inc(1);}
 
-            if p.is_Off() {
+            if p.is_off() {
                 let msg = format!("progress[{progress}] skipped.");
                 println!("{msg}");
                 self.putlog(&msg);
                 continue;
             }
 
-            if p.is_Large() && self.is_large_data_mode() {
+            if p.is_large() && self.is_large_data_mode() {
                 self.run_large_dataset(progress, &pbtop)?;
             } else {
                 self.run_normal(progress, &pbtop)?;
@@ -938,17 +937,17 @@ impl Training {
     /// - destination directory: `self.large_dir`
     /// - source kifu files: `self.kifudir`
     /// - mate files: `self.matedir` and`self.matefiles`
-    /// - \# of division: `self.large_ratio[LargeRatio::IndexDiv]`
+    /// - \# of division: `self.large_ratio[LargeRatioIndex::Div]`
     fn split_large_dataset(&self) -> Result<(), String> {
         // clean up
         data_loader::clean_up_large_data(&self.large_dir)?;
 
-        let div_ratio = self.large_ratio[LargeRatio::IndexDiv as usize];
+        let div_ratio = self.large_ratio[LargeRatioIndex::Div as usize];
 
         // load kifu
         for kifudir in self.kifudir.iter() {
             data_loader::prepare_large_data(
-                &kifudir, &self.large_dir, div_ratio)?;
+                kifudir, &self.large_dir, div_ratio)?;
         }
 
         // load mate
@@ -967,7 +966,7 @@ impl Training {
         &mut self, progress : usize, pbtop : &Option<ProgressBar>)
             -> Result<(), tch::TchError> {
         // prepare dataset
-        self.split_large_dataset().map_err(|e| tch::TchError::Torch(e))?;
+        self.split_large_dataset().map_err(tch::TchError::Torch)?;
 
         if let Some(pb ) = pbtop {pb.inc(1);}
 
