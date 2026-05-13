@@ -486,7 +486,7 @@ impl Training {
         let mut final_loss = 0f64;
 
         for wep in 0..self.warmup {
-            let (train_idx, eval_idx) = self.gen_largedata_index();
+            let (train_idx, eval_idx) = self.gen_largedata_index().unwrap();
 
             let eta = self.eta;
             let w_eta_min = eta * MIN_COSANEAL;
@@ -664,7 +664,7 @@ impl Training {
         let mut actual_epochs = self.epoch;
         self.anealing_step = 0;
         for ep in 0..self.epoch * 2 {
-            let (train_idx, eval_idx) = self.gen_largedata_index();
+            let (train_idx, eval_idx) = self.gen_largedata_index().unwrap();
 
             let iloss = if testratio > 1 {ep % testratio} else {99999};
             let (new_lr, next_step) = self.anealing_learning_rate(ep);
@@ -816,7 +816,7 @@ impl Training {
         for ep in 0..self.epoch {
             let iloss = if testratio > 1 {ep % testratio} else {99999};
 
-            let (train_idx, eval_idx) = self.gen_largedata_index();
+            let (train_idx, eval_idx) = self.gen_largedata_index().unwrap();
 
             for i in 0..train_idx.len() {
                 let (inputs, targets) =
@@ -860,20 +860,31 @@ impl Training {
 
     /// 学習データを複数のファイルに分割してから学習を始めるかどうか
     fn is_large_data_mode(&self) -> bool {
+        let div = self.large_ratio[LargeRatio::IndexDiv as usize];
+        let train = self.large_ratio[LargeRatio::IndexTrain as usize];
+        let eval = self.large_ratio[LargeRatio::IndexEval as usize];
         !self.large_dir.is_empty()  // 出力先の指定あり
-        && self.large_ratio[LargeRatio::IndexDiv as usize] > 1  // 2つ以上に分ける
-        && self.large_ratio[LargeRatio::IndexTrain as usize] > 0  // 1つは絶対に必要
-        && self.large_ratio[LargeRatio::IndexEval as usize] > 0  // 1つは絶対に必要
+            && div > 1  // 2つ以上に分ける
+            && train > 0  // 1つは絶対に必要
+            && eval > 0  // 1つは絶対に必要
+            && div >= train + eval
     }
 
     /// generate indexes for training and loss evaluation.
     ///
     /// # Returns
     /// (indexes for training, indexes for loss evaluation)
-    fn gen_largedata_index(&self) -> (Vec<usize>, Vec<usize>) {
-        let div_ratio = self.large_ratio[LargeRatio::IndexDiv as usize] as usize;
-        let train_file_size = self.large_ratio[LargeRatio::IndexTrain as usize] as usize;
-        let eval_file_size = self.large_ratio[LargeRatio::IndexEval as usize] as usize;
+    fn gen_largedata_index(&self) -> Option<(Vec<usize>, Vec<usize>)> {
+        let div_ratio =
+            self.large_ratio[LargeRatio::IndexDiv as usize] as usize;
+        let train_file_size =
+            self.large_ratio[LargeRatio::IndexTrain as usize] as usize;
+        let eval_file_size =
+            self.large_ratio[LargeRatio::IndexEval as usize] as usize;
+
+        if div_ratio == 0 || div_ratio < train_file_size + eval_file_size {
+            return None;
+        }
 
         let mut numbers = (0..div_ratio).collect::<Vec<_>>();
         let mut rng = rand::thread_rng();
@@ -882,7 +893,7 @@ impl Training {
         let train_idx = numbers[0..train_file_size].to_vec();
         let eval_idx = numbers[train_file_size..train_file_size + eval_file_size].to_vec();
 
-        (train_idx, eval_idx)
+        Some((train_idx, eval_idx))
     }
 
     /// run training
@@ -1213,4 +1224,67 @@ fn test_partlist() {
     let p7 = Training::partlist(&s7);
     assert_eq!(p7,
         vec![Part::Off, Part::Off, Part::Off, Part::Off, Part::Large, Part::Large]);
+}
+
+#[test]
+fn test_gen_largedata_index() {
+    let mut arg = argument::Arg::parse();
+    arg.large_dir = Some("aaa".to_string());
+    arg.large_ratio = vec![10, 5, 2];
+    let t = Training::from(arg);
+    assert!(t.is_large_data_mode());
+    let (a, b) = t.gen_largedata_index().unwrap();
+    assert_eq!(a.len(), 5);
+    assert_eq!(b.len(), 2);
+
+    let mut arg = argument::Arg::parse();
+    arg.large_dir = Some("aaa".to_string());
+    arg.large_ratio = vec![10, 5, 5];
+    let t = Training::from(arg);
+    assert!(t.is_large_data_mode());
+    let (a, b) = t.gen_largedata_index().unwrap();
+    assert_eq!(a.len(), 5);
+    assert_eq!(b.len(), 5);
+
+    let c = [a.as_slice(), b.as_slice()].concat();
+
+    for i in 0..10 {
+        assert!(c.contains(&i));
+    }
+}
+
+#[test]
+fn test_gen_largedata_index_invalid() {
+    let arg = argument::Arg::parse();
+    let t = Training::from(arg);
+    assert!(!t.is_large_data_mode());
+    assert_eq!(t.gen_largedata_index(), None);
+
+    let mut arg = argument::Arg::parse();
+    arg.large_ratio = vec![10, 5, 2];
+    let t = Training::from(arg);
+    assert!(!t.is_large_data_mode());
+    let (a, b) = t.gen_largedata_index().unwrap();
+    assert_eq!(a.len(), 5);
+    assert_eq!(b.len(), 2);
+
+    let mut arg = argument::Arg::parse();
+    arg.large_dir = Some("aaa".to_string());
+    let t = Training::from(arg);
+    assert!(!t.is_large_data_mode());
+    assert_eq!(t.gen_largedata_index(), None);
+
+    let mut arg = argument::Arg::parse();
+    arg.large_dir = Some("aaa".to_string());
+    arg.large_ratio = vec![10, 5, 6];
+    let t = Training::from(arg);
+    assert!(!t.is_large_data_mode());
+    assert_eq!(t.gen_largedata_index(), None);
+
+    let mut arg = argument::Arg::parse();
+    arg.large_dir = Some("aaa".to_string());
+    arg.large_ratio = vec![10, 7, 4];
+    let t = Training::from(arg);
+    assert!(!t.is_large_data_mode());
+    assert_eq!(t.gen_largedata_index(), None);
 }
