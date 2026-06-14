@@ -106,7 +106,8 @@ pub fn prepare_large_data(input_dir : &str, output_dir : &str, div_ratio : i32)
 
     let files = find_kifu_files(input_dir);
     for fname in files {
-        let path = std::path::Path::new(dirpath).join(fname);
+        let path = std::path::Path::new(input_dir).join(fname);
+        // eprintln!("path:{path:?}");
         let content = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();
         let kifu = kifu::Kifu::from(&lines);
@@ -205,7 +206,7 @@ pub fn prepare_large_mate(input_dir : &[String], input_files : &[String], output
     for inputdir in input_dir {
         let files = find_mate_files(inputdir);
         for fname in files {
-            let path = std::path::Path::new(dirpath).join(fname);
+            let path = std::path::Path::new(inputdir).join(fname);
             let content =
                 load_mates_all(path.to_str().unwrap())
                     .map_err(|e| format!("err:{e}"))?;
