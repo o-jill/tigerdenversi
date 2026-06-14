@@ -473,7 +473,8 @@ impl Training {
 
         let pb = if self.show_progressbar {
             let pb = self.multibar.add(
-            ProgressBar::new(self.warmup as u64));
+            ProgressBar::new(
+                self.warmup as u64 * (1 + 3 * (self.large_training_size() + self.large_eval_size())) as u64));
             pb.set_style(
                 ProgressStyle::with_template(
                 "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
@@ -649,7 +650,8 @@ impl Training {
             minibatch : i64, progress : usize) {
         let pb = if self.show_progressbar {
             let pb = self.multibar.add(
-            ProgressBar::new(self.epoch as u64));
+            ProgressBar::new(
+                self.epoch as u64 * (1 + 3 * (self.large_training_size() + self.large_eval_size())) as u64));
             pb.set_style(
                 ProgressStyle::with_template(
                 "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
@@ -869,17 +871,26 @@ impl Training {
             && div >= train + eval
     }
 
+    fn large_division_size(&self) -> usize {
+        self.large_ratio[LargeRatioIndex::Div as usize] as usize
+    }
+
+    fn large_training_size(&self) -> usize {
+        self.large_ratio[LargeRatioIndex::Train as usize] as usize
+    }
+
+    fn large_eval_size(&self) -> usize {
+        self.large_ratio[LargeRatioIndex::Eval as usize] as usize
+    }
+
     /// generate indexes for training and loss evaluation.
     ///
     /// # Returns
     /// (indexes for training, indexes for loss evaluation)
     fn gen_largedata_index(&self) -> Option<(Vec<usize>, Vec<usize>)> {
-        let div_ratio =
-            self.large_ratio[LargeRatioIndex::Div as usize] as usize;
-        let train_file_size =
-            self.large_ratio[LargeRatioIndex::Train as usize] as usize;
-        let eval_file_size =
-            self.large_ratio[LargeRatioIndex::Eval as usize] as usize;
+        let div_ratio = self.large_division_size();
+        let train_file_size = self.large_training_size();
+        let eval_file_size = self.large_eval_size();
 
         if div_ratio == 0 || div_ratio < train_file_size + eval_file_size {
             return None;
@@ -938,19 +949,22 @@ impl Training {
     /// - source kifu files: `self.kifudir`
     /// - mate files: `self.matedir` and`self.matefiles`
     /// - \# of division: `self.large_ratio[LargeRatioIndex::Div]`
-    fn split_large_dataset(&self) -> Result<(), String> {
+    fn split_large_dataset(&mut self) -> Result<(), String> {
         // clean up
+        self.putlog("clean_up_large_data");
         data_loader::clean_up_large_data(&self.large_dir)?;
 
-        let div_ratio = self.large_ratio[LargeRatioIndex::Div as usize];
+        let div_ratio = self.large_division_size() as i32;
 
         // load kifu
+        self.putlog("load_large_kifu");
         for kifudir in self.kifudir.iter() {
             data_loader::prepare_large_data(
                 kifudir, &self.large_dir, div_ratio)?;
         }
 
         // load mate
+        self.putlog("load_large_mate");
         data_loader::prepare_large_mate(
             &self.matedir, &self.matefiles, &self.large_dir, div_ratio)?;
 
@@ -965,6 +979,7 @@ impl Training {
     fn run_large_dataset(
         &mut self, progress : usize, pbtop : &Option<ProgressBar>)
             -> Result<(), tch::TchError> {
+        self.putlog("large mode:");
         // prepare dataset
         self.split_large_dataset().map_err(tch::TchError::Torch)?;
 
