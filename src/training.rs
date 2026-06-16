@@ -503,6 +503,9 @@ impl Training {
                     self.prepare_large_dataset(
                         &train_idx[i..i + 1], progress, &pb);
 
+                if let Some(pb) = &pb {
+                    pb.set_message(format!("{i}/{} ep:{wep}/{}", train_idx.len(), self.warmup));
+                }
                 let mut dataset = Iter2::new(&inputs, &targets, minibatch);
                 let dataset = if vs.device() == Device::Cpu {
                     dataset.shuffle()
@@ -535,7 +538,7 @@ impl Training {
             self.update(testloss, &pb, wep, elapsed);
         }
 
-        if let Some(pb) = pb {
+        if let Some(pb) = &pb {
             pb.finish_with_message(format!("warm up - done! final loss:{final_loss:.3}"));
         }
     }
@@ -696,6 +699,9 @@ impl Training {
                     self.prepare_large_dataset(
                         &train_idx[i..i + 1], progress, &pb);
 
+                if let Some(pb) = &pb {
+                    pb.set_message(format!("{i}/{} ep:{ep}/{}", train_idx.len(), self.epoch));
+                }
                 let mut dataset = Iter2::new(&inputs, &targets, minibatch);
                 let dataset = if vs.device() == Device::Cpu {
                     dataset.shuffle()
@@ -930,6 +936,10 @@ impl Training {
         let pbtop = if self.show_progressbar {
             let pb = self.multibar.add(
             ProgressBar::new(weight::N_PROGRESS_DIV as u64));
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len}").unwrap());
+
             Some(pb)
         } else {
             None
@@ -968,15 +978,23 @@ impl Training {
     /// - source kifu files: `self.kifudir`
     /// - mate files: `self.matedir` and`self.matefiles`
     /// - \# of division: `self.large_ratio[LargeRatioIndex::Div]`
-    fn split_large_dataset(&mut self) -> Result<(), String> {
+    fn split_large_dataset(&mut self, pbsplit : &Option<ProgressBar>) -> Result<(), String> {
         // clean up
         self.putlog("clean_up_large_data");
+        if let Some(pb) = pbsplit {
+            pb.inc(1);
+            pb.set_message("cleaning up large data ...");
+        }
         data_loader::clean_up_large_data(&self.large_dir)?;
 
         let div_ratio = self.large_division_size() as i32;
 
         // load kifu
         self.putlog("load_large_kifu");
+        if let Some(pb) = pbsplit {
+            pb.inc(1);
+            pb.set_message("loading large kifu ...");
+        }
         for kifudir in self.kifudir.iter() {
             data_loader::prepare_large_data(
                 kifudir, &self.large_dir, div_ratio)?;
@@ -984,6 +1002,10 @@ impl Training {
 
         // load mate
         self.putlog("load_large_mate");
+        if let Some(pb) = pbsplit {
+            pb.inc(1);
+            pb.set_message("loading large mate ...");
+        }
         data_loader::prepare_large_mate(
             &self.matedir, &self.matefiles, &self.large_dir, div_ratio)?;
 
@@ -998,11 +1020,6 @@ impl Training {
     fn run_large_dataset(
         &mut self, progress : usize, pbtop : &Option<ProgressBar>)
             -> Result<(), tch::TchError> {
-        self.putlog("large mode:");
-        // prepare dataset
-        self.split_large_dataset().map_err(tch::TchError::Torch)?;
-
-        if let Some(pb ) = pbtop {pb.inc(1);}
 
         self.anealing_step = 0;
 
@@ -1023,6 +1040,10 @@ impl Training {
         } else {
             None
         };
+
+        self.putlog("large mode:");
+        // prepare dataset
+        self.split_large_dataset(&pbchild).map_err(tch::TchError::Torch)?;
 
         if let Some(pb) = &pbchild {pb.inc(1);}
 
