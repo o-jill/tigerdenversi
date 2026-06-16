@@ -30,7 +30,7 @@ pub fn clean_up_large_data(path : &str) -> Result<(), String> {
 }
 
 pub fn gen_div_file_name(d : &std::path::Path, n : usize) -> std::path::PathBuf {
-    let fname = format!("kifu_div_{n:03}.txt");
+    let fname = format!("kifu_part_{n:03}.txt");
     d.join(fname)
 }
 
