@@ -439,8 +439,11 @@ impl Training {
                 if i == iloss {continue;}
 
                 let mut dataset = Iter2::new(inp, tar, minibatch);
-                // let dataset = dataset.shuffle();
-                let dataset = dataset.shuffle().to_device(vs.device());
+                let dataset = if vs.device() == Device::Cpu {
+                    dataset.shuffle()
+                } else {
+                    dataset.shuffle().to_device(vs.device())
+                };
                 for (xs, ys) in dataset {
                     // println!("xs: {} {:?} ys: {} {:?}",
                     //          xs.dim(), xs.size(), ys.dim(), ys.size());
@@ -501,7 +504,11 @@ impl Training {
                         &train_idx[i..i + 1], progress, &pb);
 
                 let mut dataset = Iter2::new(&inputs, &targets, minibatch);
-                let dataset = dataset.shuffle().to_device(vs.device());
+                let dataset = if vs.device() == Device::Cpu {
+                    dataset.shuffle()
+                } else {
+                    dataset.shuffle().to_device(vs.device())
+                };
                 for (xs, ys) in dataset {
                     // println!("xs: {} {:?} ys: {} {:?}",
                     //          xs.dim(), xs.size(), ys.dim(), ys.size());
@@ -581,8 +588,11 @@ impl Training {
                 if i == iloss {continue;}
 
                 let mut dataset = Iter2::new(inp, tar, minibatch);
-                // let dataset = dataset.shuffle();
-                let dataset = dataset.shuffle().to_device(vs.device());
+                let dataset = if vs.device() == Device::Cpu {
+                    dataset.shuffle()
+                } else {
+                    dataset.shuffle().to_device(vs.device())
+                };
                 for (xs, ys) in dataset {
                     // println!("xs: {} {:?} ys: {} {:?}",
                     //          xs.dim(), xs.size(), ys.dim(), ys.size());
@@ -687,8 +697,11 @@ impl Training {
                         &train_idx[i..i + 1], progress, &pb);
 
                 let mut dataset = Iter2::new(&inputs, &targets, minibatch);
-                // let dataset = dataset.shuffle();
-                let dataset = dataset.shuffle().to_device(vs.device());
+                let dataset = if vs.device() == Device::Cpu {
+                    dataset.shuffle()
+                } else {
+                    dataset.shuffle().to_device(vs.device())
+                };
                 for (xs, ys) in dataset {
                     // println!("xs: {} {:?} ys: {} {:?}",
                     //          xs.dim(), xs.size(), ys.dim(), ys.size());
@@ -777,8 +790,11 @@ impl Training {
                 if i == iloss {continue;}
 
                 let mut dataset = Iter2::new(inp, tar, minibatch);
-                // let dataset = dataset.shuffle();
-                let dataset = dataset.shuffle().to_device(vs.device());
+                let dataset = if vs.device() == Device::Cpu {
+                    dataset.shuffle()
+                } else {
+                    dataset.shuffle().to_device(vs.device())
+                };
                 // let mut loss = tch::Tensor::new();
                 for (xs, ys) in dataset {
                     // println!("xs: {} {:?} ys: {} {:?}",
@@ -825,8 +841,11 @@ impl Training {
                         &train_idx[i..i + 1], progress, &pb);
 
                 let mut dataset = Iter2::new(&inputs, &targets, minibatch);
-                // let dataset = dataset.shuffle();
-                let dataset = dataset.shuffle().to_device(vs.device());
+                let dataset = if vs.device() == Device::Cpu {
+                    dataset.shuffle()
+                } else {
+                    dataset.shuffle().to_device(vs.device())
+                };
                 // let mut loss = tch::Tensor::new();
                 for (xs, ys) in dataset {
                     // println!("xs: {} {:?} ys: {} {:?}",
