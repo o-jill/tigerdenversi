@@ -56,31 +56,34 @@ impl Part {
 }
 
 pub struct Training {
-    trainingpart : Vec<Part>,
-    kifudir : Vec<String>,
-    matedir : Vec<String>,
-    matefiles : Vec<String>,
-    devtype : String,
-    device : tch::Device,
+    // training parameters
     autostop : Option<f64>,
+    anealing_step : i32,
+    awdecay : f64,
+    device : tch::Device,
+    devtype : String,
     epoch : usize,
     eta : f64,
     minibatch : i64,
     period : i32,
-    anealing_step : i32,
-    stopwatch : std::time::Instant,
     testratio : i64,
+    trainingpart : Vec<Part>,
     warmup : usize,
     wdecay : f64,
-    awdecay : f64,
     weights : weight::Weight,
-    multibar : MultiProgress,
-    log : std::fs::File,
-    loss_curve : Vec<f64>,
-    show_progressbar : bool,
-    show_graph : bool,
+    // training data
+    kifudir : Vec<String>,
+    matedir : Vec<String>,
+    matefiles : Vec<String>,
     large_dir : String,
     large_ratio : [i32 ; LargeRatioIndex::Size as usize],
+    // ui, log
+    log : std::fs::File,
+    loss_curve : Vec<f64>,
+    multibar : MultiProgress,
+    show_graph : bool,
+    show_progressbar : bool,
+    stopwatch : std::time::Instant,
 }
 
 impl std::fmt::Display for Training {
