@@ -413,11 +413,11 @@ impl Training {
 
         let input = tch::Tensor::from_slice(
             &data_loader::extractboards(&boards)).view((boards.len() as i64, INPUTSIZE));
-        self.putlog(&format!("input : {} {:?}", input.dim(), input.size()));
+        // self.putlog(&format!("input : {} {:?}", input.dim(), input.size()));
 
         let target = tch::Tensor::from_slice(
             &data_loader::extractscore(&boards)).view((boards.len() as i64, 1));
-        self.putlog(&format!("target: {} {:?}", target.dim(), target.size()));
+        // self.putlog(&format!("target: {} {:?}", target.dim(), target.size()));
 
         if let Some(pb) = pb {pb.inc(1);}
 
