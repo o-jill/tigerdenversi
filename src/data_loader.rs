@@ -355,6 +355,47 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize,
     boards
 }
 
+fn read_mate_file_augmentation(buf : impl std::io::BufRead, progress : usize)
+        -> Result<Vec<(bitboard::BitBoard, i8)>, String> {
+    let mut ret = Vec::new();
+
+    for line in buf.lines() {
+        match line {
+            Err(e) => {return Err(format!("{e}"))},
+            Ok(l) => {
+                // コメント行 or 7文字未満
+                if l.len() < 7 || l.starts_with("#") {continue;}
+
+                // rfen,score
+                let elem : Vec<&str> = l.split(",").collect();
+                if elem.len() < 2 {
+                    return Err(format!("# of elem < 2 w/ {l}!"));
+                }
+
+                let ban = match bitboard::BitBoard::try_from(elem[0]) {
+                    Ok(b) => {b},
+                    Err(msg) => {
+                        return Err(format!("error: {msg} @ {}", elem[0]));
+                    },
+                };
+                if progress != PROGRESS_ALLOW_ALL && !ban.is_progress(progress) {continue;}
+
+                // let (b, w) = ban.fixedstones();
+                let score = match elem[1].parse::<i8>() {
+                    Err(msg) => {
+                        return Err(format!("error: parse score : {msg}"));
+                    },
+                    Ok(num) => {num},
+                };
+
+                ret.append(&mut ban.rotated_mirrored(score));
+            }
+        }
+    }
+
+    Ok(ret)
+}
+
 fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
         -> Result<Vec<(bitboard::BitBoard, i8)>, String> {
     let mut ret = Vec::new();
@@ -387,17 +428,34 @@ fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
                     },
                     Ok(num) => {num},
                 };
-                const AUGMENTATION_READ_MATE : bool = true;
-                if AUGMENTATION_READ_MATE {
-                    ret.append(&mut ban.rotated_mirrored(score));
-                } else {
-                    ret.push((ban, score));
-                }
+
+                ret.push((ban, score));
             }
         }
     }
 
     Ok(ret)
+}
+
+pub fn load_mates_augmentation(path : &str, progress : usize)
+        -> Result<Vec<(bitboard::BitBoard, i8)>, String> {
+    let filepath = std::path::Path::new(path);
+    if !filepath.exists() {return Err(format!("{path} does NOT exist!"));}
+
+    if path.ends_with(".zst") || path.ends_with(".zstd") {
+        let f = std::fs::File::open(path)
+            .map_err(|e| format!("error: {e} @ File::open"))?;
+        let z = zstd::Decoder::new(f)
+            .map_err(|e| format!("error: {e} @ zstd::Decoder::new"))?;
+
+        let buf = std::io::BufReader::new(z);
+        read_mate_file_augmentation(buf, progress)
+    } else {
+        let f = std::fs::File::open(path).map_err(|e| format!("{e}"))?;
+
+        let buf = std::io::BufReader::new(f);
+        read_mate_file_augmentation(buf, progress)
+    }
 }
 
 pub fn load_mates(path : &str, progress : usize)
@@ -433,12 +491,12 @@ fn load_mates_all(path : &str)
             .map_err(|e| format!("error: {e} @ zstd::Decoder::new"))?;
 
         let buf = std::io::BufReader::new(z);
-        read_mate_file(buf, PROGRESS_ALLOW_ALL)
+        read_mate_file_augmentation(buf, PROGRESS_ALLOW_ALL)
     } else {
         let f = std::fs::File::open(path).map_err(|e| format!("{e}"))?;
 
         let buf = std::io::BufReader::new(f);
-        read_mate_file(buf, PROGRESS_ALLOW_ALL)
+        read_mate_file_augmentation(buf, PROGRESS_ALLOW_ALL)
     }
 }
 

@@ -7,6 +7,7 @@ use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
 const MIN_COSANEAL : f64 = 1e-4;
+const LARGEDATA_CHUNK_SIZE : usize = 2;
 enum LargeRatioIndex {
     Div = 0,
     Train = 1,
@@ -304,7 +305,7 @@ impl Training {
                     if !fname.starts_with("mate") {return Vec::new();}
 
                     let path = std::path::Path::new(d).join(fname);
-                    match data_loader::load_mates(&path.display().to_string(), progress) {
+                    match data_loader::load_mates_augmentation(&path.display().to_string(), progress) {
                         Ok(arr) => {arr},
                         Err(msg) => {panic!("{msg}")},
                     }
@@ -317,7 +318,7 @@ impl Training {
             let mut mates = self.matefiles.iter().flat_map(
                 |path| {
                     if let Some(pb) = pb {pb.inc(1);}
-                    match data_loader::load_mates(path, progress) {
+                    match data_loader::load_mates_augmentation(path, progress) {
                         Ok(arr) => {arr},
                         Err(msg) => {panic!("{msg}")},
                     }
@@ -489,8 +490,7 @@ impl Training {
 
         let pb = if self.show_progressbar {
             let pb = self.multibar.add(
-            ProgressBar::new(
-                self.warmup as u64 * (1 + 3 * (self.large_training_size() + self.large_eval_size())) as u64));
+                ProgressBar::new(self.progressbar_max(self.warmup)));
             pb.set_style(
                 ProgressStyle::with_template(
                 "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
@@ -511,13 +511,13 @@ impl Training {
             let a = (eta - w_eta_min) / self.warmup as f64;
             optm.set_lr(w_eta_min + a * wep as f64);
 
-            for i in 0..train_idx.len() {
+            // LARGEDATA_CHUNK_SIZEファイルずつ
+            for (idx, indices) in train_idx.chunks(LARGEDATA_CHUNK_SIZE).enumerate() {
                 let (inputs, targets) =
-                    self.prepare_large_dataset(
-                        &train_idx[i..i + 1], progress, &pb);
+                    self.prepare_large_dataset(indices, progress, &pb);
 
                 if let Some(pb) = &pb {
-                    pb.set_message(format!("{i}/{} ep:{wep}/{}", train_idx.len(), self.warmup));
+                    pb.set_message(format!("{idx}/{} ep:{wep}/{}", train_idx.len(), self.warmup));
                 }
                 let mut dataset = Iter2::new(&inputs, &targets, minibatch);
                 let dataset = if vs.device() == Device::Cpu {
@@ -676,8 +676,7 @@ impl Training {
             minibatch : i64, progress : usize) {
         let pb = if self.show_progressbar {
             let pb = self.multibar.add(
-            ProgressBar::new(
-                self.epoch as u64 * (1 + 3 * (self.large_training_size() + self.large_eval_size())) as u64));
+                ProgressBar::new(self.progressbar_max(self.epoch)));
             pb.set_style(
                 ProgressStyle::with_template(
                 "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
@@ -707,13 +706,17 @@ impl Training {
             }
 
             optm.set_lr(new_lr);
-            for i in 0..train_idx.len() {
+            // LARGEDATA_CHUNK_SIZEファイルずつ
+            for (idx, indices) in train_idx.chunks(LARGEDATA_CHUNK_SIZE).enumerate() {
                 let (inputs, targets) =
-                    self.prepare_large_dataset(
-                        &train_idx[i..i + 1], progress, &pb);
+                    self.prepare_large_dataset(indices, progress, &pb);
 
                 if let Some(pb) = &pb {
-                    pb.set_message(format!("{i}/{} ep:{ep}/{}", train_idx.len(), self.epoch));
+                    pb.set_message(
+                        format!("{idx}/{} ep:{ep}/{}",
+                            (train_idx.len() + LARGEDATA_CHUNK_SIZE - 1)
+                                / LARGEDATA_CHUNK_SIZE,
+                            self.epoch));
                 }
                 let mut dataset = Iter2::new(&inputs, &targets, minibatch);
                 let dataset = if vs.device() == Device::Cpu {
@@ -917,8 +920,24 @@ impl Training {
         self.large_ratio[LargeRatioIndex::Train as usize] as usize
     }
 
+    fn large_training_chunk_size(&self) -> usize {
+        (self.large_ratio[LargeRatioIndex::Train as usize] as usize
+            + LARGEDATA_CHUNK_SIZE - 1) / LARGEDATA_CHUNK_SIZE
+    }
+
     fn large_eval_size(&self) -> usize {
         self.large_ratio[LargeRatioIndex::Eval as usize] as usize
+    }
+
+    fn progressbar_max(&self, epoch : usize) -> u64 {
+        let tr = self.large_training_chunk_size();
+        let ev = self.large_eval_size();
+        (epoch * (1 + 4 * tr + 3 * ev)) as u64
+        // 21216/16864 1/20 ep:482/496
+        // 21220/16864 2/20 ep:482/496
+        // 21256/16864 0/20 ep:483/496
+        // 21260/16864 1/20 ep:483/496   44
+        // 21264/16864 2/20 ep:483/496
     }
 
     /// generate indexes for training and loss evaluation.
@@ -1334,6 +1353,7 @@ fn test_gen_largedata_index_invalid() {
     let (a, b) = t.gen_largedata_index().unwrap();
     assert_eq!(a.len(), 5);
     assert_eq!(b.len(), 2);
+    assert_eq!(t.progressbar_max(100), 100 * (1 + 4 * 3 + 3 * 2));
 
     let mut arg = argument::Arg::parse();
     arg.large_dir = Some("aaa".to_string());
