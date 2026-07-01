@@ -718,8 +718,7 @@ impl Training {
                 if let Some(pb) = &pb {
                     pb.set_message(
                         format!("{idx}/{} ep:{ep}/{}",
-                            (train_idx.len() + LARGEDATA_CHUNK_SIZE - 1)
-                                / LARGEDATA_CHUNK_SIZE,
+                            train_idx.len().div_ceil(LARGEDATA_CHUNK_SIZE),
                             self.epoch));
                 }
                 let mut dataset = Iter2::new(&inputs, &targets, minibatch);
@@ -925,8 +924,8 @@ impl Training {
     }
 
     fn large_training_chunk_size(&self) -> usize {
-        (self.large_ratio[LargeRatioIndex::Train as usize] as usize
-            + LARGEDATA_CHUNK_SIZE - 1) / LARGEDATA_CHUNK_SIZE
+        (self.large_ratio[LargeRatioIndex::Train as usize] as usize)
+            .div_ceil(LARGEDATA_CHUNK_SIZE)
     }
 
     fn large_eval_size(&self) -> usize {
