@@ -369,7 +369,17 @@ impl Training {
         }
     }
 
-    fn prepare_large_dataset(&mut self, indexes : &[usize], progress : usize, pb : &Option<ProgressBar>)
+    /// read splitted large dataset
+    ///
+    /// # Arguments
+    /// - `indexes` an array of indexes of splitted large dataset to read
+    /// - `progress` index of the progress to read
+    /// - `pb` ProgressBar
+    ///
+    /// # Returns
+    /// (input Tensor, output Tensor)
+    fn prepare_large_dataset(&mut self,
+        indexes : &[usize], progress : usize, pb : &Option<ProgressBar>)
             -> (tch::Tensor, tch::Tensor) {
         // let sta = std::time::Instant::now();
         let mut boards : Vec<_> = indexes.iter().flat_map(|&index| {
