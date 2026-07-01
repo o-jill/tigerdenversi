@@ -500,8 +500,7 @@ fn load_mates_all(path : &str)
     }
 }
 
-pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8)>,
-                   log : &mut std::fs::File, show_path : bool) {
+pub fn dedup_boards(boards : &mut Vec<(bitboard::BitBoard, i8)>) {
     // println!("board: {} boards", boards.len());
     // let sta = std::time::Instant::now();
     boards.sort_by(|a, b| {
@@ -509,9 +508,6 @@ pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8)>,
     });
     boards.dedup_by(|a, b| {a == b});
     // println!("{}usec",sta.elapsed().as_micros());
-    let msg = format!("board: {} boards\n", boards.len());
-    log.write_all(msg.as_bytes()).unwrap();
-    if show_path {print!("{msg}");}
 }
 
 pub fn extractboards(boards : &[(bitboard::BitBoard, i8)])

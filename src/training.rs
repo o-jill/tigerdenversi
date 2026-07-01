@@ -328,7 +328,9 @@ impl Training {
             if !mates.is_empty() {boards.append(&mut mates);}
         }
 
-        data_loader::dedupboards(&mut boards, &mut self.log, pb.is_none());
+        data_loader::dedup_boards(&mut boards);
+        self.putlog(&format!("board: {} boards\n", boards.len()));
+
         boards.shuffle(&mut rand::thread_rng());
         // println!("{}msec",sta.elapsed().as_millis());
         if let Some(pb) = pb {pb.inc(1);}
@@ -397,7 +399,9 @@ impl Training {
                 })
         }).collect::<Vec<(bitboard::BitBoard, i8)>>();
 
-        data_loader::dedupboards(&mut boards, &mut self.log, pb.is_none());
+        data_loader::dedup_boards(&mut boards);
+        // self.putlog(&format!("board: {} boards\n", boards.len()));
+
         // boards.shuffle(&mut rand::thread_rng());
         // println!("{}msec",sta.elapsed().as_millis());
         if let Some(pb) = pb {pb.inc(1);}
