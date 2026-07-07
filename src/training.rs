@@ -31,7 +31,7 @@ impl std::convert::From<&str> for Part {
 
         let txt_lo = txt.to_lowercase();
 
-        if disable.contains(&txt_lo.as_str()) {
+        if disable.contains(&txt_lo.trim()) {
             Part::Off
         } else if txt_lo == large {
             Part::Large
