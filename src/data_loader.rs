@@ -40,7 +40,7 @@ pub fn gen_div_file_name(d : &std::path::Path, n : usize) -> std::path::PathBuf 
 /// - `input_dir`
 ///   a directory which contains kifu*.txt.
 /// - `output_dir`
-///   a directory which will have kifu_div_*.txt.
+///   a directory which will have kifu_part_*.txt.
 /// - `div_ratio`
 ///   number of division.
 ///
@@ -96,7 +96,7 @@ pub fn prepare_large_data(input_dir : &str, output_dir : &str, div_ratio : i32)
 
         // flush remaining data
         for (n, buf) in buffers.iter().enumerate() {
-            let fname = format!("kifu_div_{n:03}.txt");
+            let fname = format!("kifu_part_{n:03}.txt");
             let filepath = dirpath.join(fname);
             let mut f = std::fs::OpenOptions::new()
                 .create(true).append(true).open(filepath).unwrap();
@@ -138,7 +138,7 @@ pub fn prepare_large_data(input_dir : &str, output_dir : &str, div_ratio : i32)
 /// - `input_files`
 ///   mate files
 /// - `output_dir`
-///   a directory which will have kifu_div_*.txt.
+///   a directory which will have kifu_part_*.txt.
 /// - `div_ratio`
 ///   number of division.
 ///
@@ -184,7 +184,7 @@ pub fn prepare_large_mate(input_dir : &[String], input_files : &[String], output
                 const LIMIT_SIZE : usize = 1024 * 50;
                 if buffers[n].len() < LIMIT_SIZE {continue;}
 
-                let fname = format!("kifu_div_{n:03}.txt");
+                let fname = gen_div_file_name(&dirpath, n);
                 let filepath = dirpath.join(fname);
                 let mut f = std::fs::OpenOptions::new()
                     .create(true).append(true).open(filepath).unwrap();
@@ -195,7 +195,7 @@ pub fn prepare_large_mate(input_dir : &[String], input_files : &[String], output
 
         // flush remaining data
         for (n, buf) in buffers.iter().enumerate() {
-            let fname = format!("kifu_div_{n:03}.txt");
+            let fname = format!("kifu_part_{n:03}.txt");
             let filepath = dirpath.join(fname);
             let mut f = std::fs::OpenOptions::new()
                 .create(true).append(true).open(filepath).unwrap();
