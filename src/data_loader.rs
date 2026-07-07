@@ -52,7 +52,7 @@ pub fn gen_div_file_name(d : &std::path::Path, n : usize) -> std::path::PathBuf 
 pub fn prepare_large_data(input_dir : &str, output_dir : &str, div_ratio : i32)
         -> Result<(), String> {
     if input_dir.is_empty() || output_dir.is_empty() {return Ok(());}
-    if div_ratio == 0 {
+    if div_ratio <= 0 {
         return Err("invalid ratio value: {ratio:?}".to_string());
     }
 
