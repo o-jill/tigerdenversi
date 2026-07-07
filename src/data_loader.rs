@@ -217,7 +217,7 @@ pub fn prepare_large_mate(input_dir : &[String], input_files : &[String], output
     }
 
     for fname in input_files {
-        let path = std::path::Path::new(dirpath).join(fname);
+        let path = std::env::current_dir().unwrap().join(fname);
         let content =
             load_mates_all(path.to_str().unwrap())
                 .map_err(|e| format!("err:{e}"))?;
