@@ -1099,7 +1099,7 @@ impl Training {
             }).collect::<Vec<String>>().join(""));
         let datasize = 0;  // target.size()[0];
 
-        let minibatch = self.adjust_minibatch(datasize);
+        let minibatch = self.minibatch;  // adjust_minibatch(datasize);
 
         let msg = format!("auto stop:{:?}\n", self.autostop)
             + &format!("datasize: {datasize}\n")
