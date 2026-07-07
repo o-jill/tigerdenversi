@@ -1318,7 +1318,7 @@ fn test_partlist() {
 #[test]
 fn test_gen_largedata_index() {
     let arg = argument::Arg::parse_from(
-        &["", "--large-dir", "aaa", "--large-ratio", "10,5,2"]);
+        ["", "--large-dir", "aaa", "--large-ratio", "10,5,2"]);
     let t = Training::from(arg);
     assert!(t.is_large_data_mode());
     let (a, b) = t.gen_largedata_index().unwrap();
@@ -1326,7 +1326,7 @@ fn test_gen_largedata_index() {
     assert_eq!(b.len(), 2);
 
     let arg = argument::Arg::parse_from(
-        &["", "--large-dir", "aaa", "--large-ratio", "10,5,5"]);
+        ["", "--large-dir", "aaa", "--large-ratio", "10,5,5"]);
     let t = Training::from(arg);
     assert!(t.is_large_data_mode());
     let (a, b) = t.gen_largedata_index().unwrap();
@@ -1342,12 +1342,12 @@ fn test_gen_largedata_index() {
 
 #[test]
 fn test_gen_largedata_index_invalid() {
-    let arg = argument::Arg::parse_from(&[""]);
+    let arg = argument::Arg::parse_from([""]);
     let t = Training::from(arg);
     assert!(!t.is_large_data_mode());
     assert_eq!(t.gen_largedata_index(), None);
 
-    let arg = argument::Arg::parse_from(&["", "--large-ratio", "10,5,2"]);
+    let arg = argument::Arg::parse_from(["", "--large-ratio", "10,5,2"]);
     let t = Training::from(arg);
     assert!(!t.is_large_data_mode());
     let (a, b) = t.gen_largedata_index().unwrap();
@@ -1355,20 +1355,20 @@ fn test_gen_largedata_index_invalid() {
     assert_eq!(b.len(), 2);
     assert_eq!(t.progressbar_max(100), 100 * (1 + 4 * 3 + 3 * 2));
 
-    let arg = argument::Arg::parse_from(&["", "--large-dir", "aaa" ]);
+    let arg = argument::Arg::parse_from(["", "--large-dir", "aaa" ]);
     let t = Training::from(arg);
     assert!(!t.is_large_data_mode());
     assert_eq!(t.gen_largedata_index(), None);
     assert_eq!(t.large_dir, "aaa");
 
     let arg = argument::Arg::parse_from(
-        &["", "--large-dir", "aaa", "--large-ratio", "10,5,6"]);
+        ["", "--large-dir", "aaa", "--large-ratio", "10,5,6"]);
     let t = Training::from(arg);
     assert!(!t.is_large_data_mode());
     assert_eq!(t.gen_largedata_index(), None);
 
     let arg = argument::Arg::parse_from(
-        &["", "--large-dir", "aaa", "--large-ratio", "10,7,4"]);
+        ["", "--large-dir", "aaa", "--large-ratio", "10,7,4"]);
     let t = Training::from(arg);
     assert!(!t.is_large_data_mode());
     assert_eq!(t.gen_largedata_index(), None);
