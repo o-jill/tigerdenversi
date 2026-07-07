@@ -372,10 +372,10 @@ impl Training {
         }
     }
 
-    /// read splitted large dataset
+    /// read split large dataset
     ///
     /// # Arguments
-    /// - `indexes` an array of indexes of splitted large dataset to read
+    /// - `indexes` an array of indexes of split large dataset to read
     /// - `progress` index of the progress to read
     /// - `pb` ProgressBar
     ///
