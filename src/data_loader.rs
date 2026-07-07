@@ -184,7 +184,7 @@ pub fn prepare_large_mate(input_dir : &[String], input_files : &[String], output
                 const LIMIT_SIZE : usize = 1024 * 50;
                 if buffers[n].len() < LIMIT_SIZE {continue;}
 
-                let fname = gen_div_file_name(&dirpath, n);
+                let fname = gen_div_file_name(dirpath, n);
                 let filepath = dirpath.join(fname);
                 let mut f = std::fs::OpenOptions::new()
                     .create(true).append(true).open(filepath).unwrap();
