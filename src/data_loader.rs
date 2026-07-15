@@ -96,8 +96,7 @@ pub fn prepare_large_data(input_dir : &str, output_dir : &str, div_ratio : i32)
 
         // flush remaining data
         for (n, buf) in buffers.iter().enumerate() {
-            let fname = format!("kifu_part_{n:03}.txt");
-            let filepath = dirpath.join(fname);
+            let filepath = gen_div_file_name(dirpath, n);
             let mut f = std::fs::OpenOptions::new()
                 .create(true).append(true).open(filepath).unwrap();
             f.write_all(buf.as_bytes()).unwrap();
@@ -184,8 +183,7 @@ pub fn prepare_large_mate(input_dir : &[String], input_files : &[String], output
                 const LIMIT_SIZE : usize = 1024 * 50;
                 if buffers[n].len() < LIMIT_SIZE {continue;}
 
-                let fname = gen_div_file_name(dirpath, n);
-                let filepath = dirpath.join(fname);
+                let filepath = gen_div_file_name(dirpath, n);
                 let mut f = std::fs::OpenOptions::new()
                     .create(true).append(true).open(filepath).unwrap();
                 f.write_all(buffers[n].as_bytes()).unwrap();
@@ -195,8 +193,7 @@ pub fn prepare_large_mate(input_dir : &[String], input_files : &[String], output
 
         // flush remaining data
         for (n, buf) in buffers.iter().enumerate() {
-            let fname = format!("kifu_part_{n:03}.txt");
-            let filepath = dirpath.join(fname);
+            let filepath = gen_div_file_name(dirpath, n);
             let mut f = std::fs::OpenOptions::new()
                 .create(true).append(true).open(filepath).unwrap();
             f.write_all(buf.as_bytes()).unwrap();
