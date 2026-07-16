@@ -970,7 +970,7 @@ impl Training {
     pub fn run(&mut self) -> Result<(), tch::TchError> {
         let pbtop = if self.show_progressbar {
             let pb = self.multibar.add(
-            ProgressBar::new(weight::N_PROGRESS_DIV as u64));
+            ProgressBar::new(weight::N_PROGRESS_DIV as u64 + 2));
             pb.set_style(
                 ProgressStyle::with_template(
                     "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len}").unwrap());
@@ -980,10 +980,9 @@ impl Training {
             None
         };
 
+        if let Some(pb ) = &pbtop {pb.inc(1);}
         let partlist = self.trainingpart.clone();
         for (progress, p) in partlist.iter().enumerate() {
-            if let Some(pb ) = &pbtop {pb.inc(1);}
-
             if p.is_off() {
                 let msg = format!("progress[{progress}] skipped.");
                 println!("{msg}");
@@ -996,10 +995,14 @@ impl Training {
             } else {
                 self.run_normal(progress, &pbtop)?;
             }
+
+            if let Some(pb ) = &pbtop {pb.inc(1);}
         }
-        if let Some(pb ) = &pbtop {pb.finish();}
 
         neuralnet::writeweights(&self.weights);
+
+        if let Some(pb ) = &pbtop {pb.inc(1);}
+        if let Some(pb ) = &pbtop {pb.finish();}
 
         self.plot_loss();
 
