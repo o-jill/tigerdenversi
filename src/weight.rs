@@ -344,8 +344,13 @@ impl Weight {
         let idx_to = N_WEIGHT_INPUTBIAS;
         array[idx_to..idx_to + N_HIDDEN + N_HIDDEN * 16].copy_from_slice(
             &newtable[idx_from..idx_from + N_HIDDEN + N_HIDDEN * 16]);
-        // 2層目の重みまでコピー
+        // 2層目のバイアスの途中までコピー
         let idx_from = idx_from + N_HIDDEN + N_HIDDEN * 16;
+        let idx_to = N_WEIGHT_LAYER1BIAS;
+        array[idx_to..idx_to + 16].copy_from_slice(
+                &newtable[idx_from..idx_from + 16]);
+        // 2層目の重みの途中までコピー
+        let idx_from = idx_from + 16;
         let idx_to = N_WEIGHT_LAYER2;
         array[idx_to..idx_to + 16].copy_from_slice(
                 &newtable[idx_from..idx_from + 16]);
@@ -379,8 +384,13 @@ impl Weight {
         let idx_to = N_WEIGHT_INPUTBIAS;
         array[idx_to..idx_to + N_HIDDEN + N_HIDDEN * 16].copy_from_slice(
             &newtable[idx_from..idx_from + N_HIDDEN + N_HIDDEN * 16]);
-        // 2層目の重みまでコピー
+        // 1層目のバイアスの途中までコピー
         let idx_from = idx_from + N_HIDDEN + N_HIDDEN * 16;
+        let idx_to = N_WEIGHT_LAYER1BIAS;
+        array[idx_to..idx_to + 16].copy_from_slice(
+                &newtable[idx_from..idx_from + 16]);
+        // 2層目の重みまでコピー
+        let idx_from = idx_from + 16;
         let idx_to = N_WEIGHT_LAYER2;
         array[idx_to..idx_to + 16].copy_from_slice(
                 &newtable[idx_from..idx_from + 16]);
@@ -408,12 +418,11 @@ impl Weight {
             return Err(format!("size mismatch v12:{WSZV12} != {nsz}"));
         }
 
-//        self.weight[progress][..N_WEIGHT].copy_from_slice(&newtable);
         let mut array = [0f32 ; WSZV13];
         // 入力の重み,バイアス, 1層目途中までをコピー
         let idx = N_WEIGHT_LAYER1 + N_HIDDEN * 16;
         array[..idx].copy_from_slice(&newtable[..idx]);
-        // 1層目バイアスと2層目の途中までコピー
+        // 1層目バイアスをコピー
         let idx_from = idx;
         let idx_to = N_WEIGHT_LAYER1BIAS;
         array[idx_to..idx_to + 16].copy_from_slice(
