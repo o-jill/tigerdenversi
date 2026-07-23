@@ -53,7 +53,7 @@ pub fn prepare_large_data(input_dir : &str, output_dir : &str, div_ratio : i32)
         -> Result<(), String> {
     if input_dir.is_empty() || output_dir.is_empty() {return Ok(());}
     if div_ratio <= 0 {
-        return Err("invalid ratio value: {ratio:?}".to_string());
+        return Err("invalid ratio value: {div_ratio:?}".to_string());
     }
 
     // create output directory if it does not exist
@@ -149,8 +149,8 @@ pub fn prepare_large_data(input_dir : &str, output_dir : &str, div_ratio : i32)
 pub fn prepare_large_mate(input_dir : &[String], input_files : &[String], output_dir : &str, div_ratio : i32)
         -> Result<(), String> {
     if output_dir.is_empty() {return Ok(());}
-    if div_ratio == 0 {
-        return Err("invalid ratio value: {ratio:?}".to_string());
+    if div_ratio <= 0 {
+        return Err("invalid ratio value: {div_ratio:?}".to_string());
     }
 
     // create output directory if it does not exist
