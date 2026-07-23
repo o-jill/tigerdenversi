@@ -328,7 +328,7 @@ impl std::fmt::Display for BitBoard {
             ban.push(line);
         }
         write!(f, "{}",
-            &(ban.join("/") + match self.teban {
+            (ban.join("/") + match self.teban {
                 SENTE => { " b"}, GOTE => {" w"}, _ => {" f"}
             }))
     }

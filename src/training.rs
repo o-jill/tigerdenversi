@@ -1001,7 +1001,7 @@ impl Training {
                     eprintln!("invalid data mode!");
                     eprintln!("large_dir:{large_dir}");
                     eprintln!("div,train,eval:{div},{train},{eval}");
-                    return Err(tch::TchError::Torch(format!("invalid data mode!")));
+                    return Err(tch::TchError::Torch("invalid data mode!".to_string()));
                 }
             } else {
                 self.run_normal(progress, &pbtop)?;
