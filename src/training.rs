@@ -388,7 +388,7 @@ impl Training {
         let mut boards : Vec<_> = indexes.iter().flat_map(|&index| {
             if let Some(pb) = pb {
                 pb.inc(1);
-                pb.set_message(format!("loading idx {index}"));
+                // pb.set_message(format!("loading idx {index}"));
             }
 
             let dirpath = std::path::Path::new(&self.large_dir);
