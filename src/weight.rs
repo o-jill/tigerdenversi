@@ -76,6 +76,7 @@ pub enum EvalFile{
     V10,
     V11,
     V12,
+    V13,
 }
 
 impl std::fmt::Display for EvalFile {
@@ -95,6 +96,7 @@ impl std::fmt::Display for EvalFile {
             EvalFile::V10 => {"# 3x 128+1+2-128-16-1"},
             EvalFile::V11 => {"# 3x 128+1-128-16-1"},
             EvalFile::V12 => {"# 6x 128-128-16-1"},
+            EvalFile::V13 => {"# 6x 128-128-32-1"},
             }
         )
     }
@@ -117,6 +119,7 @@ impl std::convert::TryFrom<&str> for EvalFile {
             "# 3x 128+1+2-128-16-1" => Ok(EvalFile::V10),
             "# 3x 128+1-128-16-1" => Ok(EvalFile::V11),
             "# 6x 128-128-16-1" => Ok(EvalFile::V12),
+            "# 6x 128-128-32-1" => Ok(EvalFile::V13),
             _ => Err(format!("Unknown Header text: {txt}")),
         }
     }
@@ -264,6 +267,11 @@ impl Weight {
                         },
                         EvalFile::V12 => {
                             self.readv12(&l, idx)?;
+                            idx += 1;
+                            if idx >= N_PROGRESS_DIV {return Ok(());}
+                        },
+                        EvalFile::V13 => {
+                            self.readv13(&l, idx)?;
                             idx += 1;
                             if idx >= N_PROGRESS_DIV {return Ok(());}
                         },
