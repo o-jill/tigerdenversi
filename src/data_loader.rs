@@ -19,6 +19,15 @@ pub fn clean_up_large_data(path : &str) -> Result<(), String> {
                     continue;
                 }
 
+                let fname = e.file_name();
+                let name = fname.to_str().unwrap();
+                if !name.starts_with("kifu_part_") {
+                    continue;
+                }
+                if !name.ends_with(".txt") {
+                    continue;
+                }
+
                 if let Err(emsg) = std::fs::remove_file(e.path()) {
                     return Err(format!("remove_file:{:?} error:{emsg}", e.path()));
                 }
