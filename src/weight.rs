@@ -12,7 +12,7 @@ pub const N_INPUT_WHITE : usize = N_INPUT_BLACK + bitboard::CELL_2D;
 pub const N_INPUT : usize = N_INPUT_WHITE;
 
 pub const N_HIDDEN : usize = 128;
-pub const N_HIDDEN2 : usize = 16;
+pub const N_HIDDEN2 : usize = 32;
 const N_OUTPUT : usize = 1;
 
 const N_WEIGHT_INPUT : usize = 0; // N_INPUT_WHITE * N_HIDDEN;
