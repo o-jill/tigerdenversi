@@ -45,14 +45,16 @@ const WSZV7 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * 32
 // vvvvv relu
 #[allow(dead_code)]
 const WSZV8 : usize = (bitboard::CELL_2D + 1 + 2 + 1) * N_HIDDEN
-        + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
+        + (N_HIDDEN + 1) * 16 + 16 + 1;
 #[allow(dead_code)]
 const WSZV9 : usize = WSZV8;
 const WSZV10 : usize = (bitboard::CELL_2D * 2 + 1 + 2 + 1) * N_HIDDEN
-        + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
+        + (N_HIDDEN + 1) * 16 + 16 + 1;
 const WSZV11 : usize = (bitboard::CELL_2D * 2 + 1 + 1) * N_HIDDEN
-        + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
+        + (N_HIDDEN + 1) * 16 + 16 + 1;
 const WSZV12 : usize = (bitboard::CELL_2D * 2 + 1) * N_HIDDEN
+        + (N_HIDDEN + 1) * 16 + 16 + 1;
+const WSZV13 : usize = (bitboard::CELL_2D * 2 + 1) * N_HIDDEN
         + (N_HIDDEN + 1) * N_HIDDEN2 + N_HIDDEN2 + 1;
 
 // v2
@@ -333,12 +335,22 @@ impl Weight {
             return Err(String::from("size mismatch"));
         }
 
-        let mut array = [0f32 ; WSZV12];
+        let mut array = [0f32 ; WSZV13];
         let idx = N_WEIGHT_INPUTBIAS;
         // 入力の重みをコピー
         array[..idx].copy_from_slice(&newtable[..idx]);
-        // 入力のバイアス以降をコピー
-        array[idx..].copy_from_slice(&newtable[idx + 128 * 3..]);
+        // 入力のバイアスと1層目の途中までコピー
+        let idx_from = idx + 128 * 3;
+        let idx_to = N_WEIGHT_INPUTBIAS;
+        array[idx_to..idx_to + N_HIDDEN + N_HIDDEN * 16].copy_from_slice(
+            &newtable[idx_from..idx_from + N_HIDDEN + N_HIDDEN * 16]);
+        // 2層目の重みまでコピー
+        let idx_from = idx_from + N_HIDDEN + N_HIDDEN * 16;
+        let idx_to = N_WEIGHT_LAYER2;
+        array[idx_to..idx_to + 16].copy_from_slice(
+                &newtable[idx_from..idx_from + 16]);
+        // 2層目のバイアスをコピー
+        *array.last_mut().unwrap() = *newtable.last().unwrap();
 
         self.copy_from_slice(&array, progress);
         // println!("v10:{:?}", self.weight);
@@ -358,12 +370,23 @@ impl Weight {
             return Err(format!("size mismatch v11:{WSZV11} != {nsz}"));
         }
 
-        let mut array = [0f32 ; WSZV12];
+        let mut array = [0f32 ; WSZV13];
         let idx = N_WEIGHT_INPUTBIAS;
         // 入力の重みをコピー
         array[..idx].copy_from_slice(&newtable[..idx]);
-        // 入力のバイアス以降をコピー
-        array[idx..].copy_from_slice(&newtable[idx + 128..]);
+        // 入力のバイアスと1層目の途中までコピー
+        let idx_from = idx + 128;
+        let idx_to = N_WEIGHT_INPUTBIAS;
+        array[idx_to..idx_to + N_HIDDEN + N_HIDDEN * 16].copy_from_slice(
+            &newtable[idx_from..idx_from + N_HIDDEN + N_HIDDEN * 16]);
+        // 2層目の重みまでコピー
+        let idx_from = idx_from + N_HIDDEN + N_HIDDEN * 16;
+        let idx_to = N_WEIGHT_LAYER2;
+        array[idx_to..idx_to + 16].copy_from_slice(
+                &newtable[idx_from..idx_from + 16]);
+        // 2層目のバイアスをコピー
+        *array.last_mut().unwrap() = *newtable.last().unwrap();
+
 
         let prgs = progress * 2;
         self.copy_from_slice(&array, prgs);
@@ -385,7 +408,43 @@ impl Weight {
             return Err(format!("size mismatch v12:{WSZV12} != {nsz}"));
         }
 
-        self.weight[progress][..N_WEIGHT].copy_from_slice(&newtable);
+//        self.weight[progress][..N_WEIGHT].copy_from_slice(&newtable);
+        let mut array = [0f32 ; WSZV13];
+        // 入力の重み,バイアス, 1層目途中までをコピー
+        let idx = N_WEIGHT_LAYER1 + N_HIDDEN * 16;
+        array[..idx].copy_from_slice(&newtable[..idx]);
+        // 1層目バイアスと2層目の途中までコピー
+        let idx_from = idx;
+        let idx_to = N_WEIGHT_LAYER1BIAS;
+        array[idx_to..idx_to + 16].copy_from_slice(
+                &newtable[idx_from..idx_from + 16]);
+        // 2層目の重みまでコピー
+        let idx_from = idx_from + 16;
+        let idx_to = N_WEIGHT_LAYER2;
+        array[idx_to..idx_to + 16].copy_from_slice(
+                &newtable[idx_from..idx_from + 16]);
+        // 2層目のバイアスをコピー
+        *array.last_mut().unwrap() = *newtable.last().unwrap();
+
+        self.copy_from_slice(&array, progress);
+
+        Ok(())
+    }
+
+    fn readv13(&mut self, line : &str, progress : usize) -> Result<(), String> {
+        let csv = line.split(",").collect::<Vec<_>>();
+        let newtable : Vec<f32> =
+            match csv.iter().map(|&a| a.parse::<f32>())
+                .collect::<Result<Vec<f32>, _>>() {
+                    Ok(w) => {w},
+                    Err(e) => {return Err(format!("{e}"))},
+                };
+        let nsz = newtable.len();
+        if WSZV13 != nsz {
+            return Err(format!("size mismatch v13:{WSZV13} != {nsz}"));
+        }
+
+        self.copy_from_slice(&newtable, progress);
 
         Ok(())
     }
