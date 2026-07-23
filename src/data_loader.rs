@@ -203,10 +203,8 @@ pub fn prepare_large_mate(input_dir : &[String], input_files : &[String], output
     for inputdir in input_dir {
         let files = find_mate_files(inputdir);
         for fname in files {
-            let path = std::path::Path::new(inputdir).join(fname);
             let content =
-                load_mates_all(path.to_str().unwrap())
-                    .map_err(|e| format!("err:{e}"))?;
+                load_mates_all(&fname).map_err(|e| format!("err:{e}"))?;
 
             // ファイルに出力する
             tx.send(content).unwrap();
@@ -503,7 +501,7 @@ pub fn dedup_boards(boards : &mut Vec<(bitboard::BitBoard, i8)>) {
     boards.sort_by(|a, b| {
         a.0.partial_cmp(&b.0).unwrap()
     });
-    boards.dedup_by(|a, b| {a == b});
+    boards.dedup();
     // println!("{}usec",sta.elapsed().as_micros());
 }
 
