@@ -59,7 +59,12 @@ pub struct Arg {
     #[arg(long, default_value_t = false)]
     pub graph : bool,
     /// paths of files which contains mate boards.
-    #[arg(long)]
     #[arg(long, value_delimiter=',')]
-    pub mate_file : Option<String>,
+    pub mate_file : Vec<String>,
+    /// generate divided training dataset in this directory
+    #[arg(long)]
+    pub large_dir : Option<String>,
+    /// # of devision, # for training and # for loss evaluation for large training dataset.
+    #[arg(long, value_delimiter=',')]
+    pub large_ratio : Vec<i32>,
 }

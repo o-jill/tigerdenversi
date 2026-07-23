@@ -5,9 +5,9 @@ const HIDDENSIZE : i64 = weight::N_HIDDEN as i64;
 const HIDDENSIZE2 : i64 = weight::N_HIDDEN2 as i64;
 
 pub fn net(vs : &nn::Path) -> impl Module {
-    let relu = true;
-    // let relu = false;  // sigmoid
-    if relu {
+    const RELU : bool = true;
+    // const RELU : bool = false;  // sigmoid
+    if RELU {
         // println!("activation function: RELU");
         nn::seq()
             .add(

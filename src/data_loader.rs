@@ -1,8 +1,240 @@
 use super::*;
 
+use rand::Rng;
 use rayon::prelude::*;
 
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
+const PROGRESS_ALLOW_ALL : usize = usize::MAX;
+
+// clean up training data in path
+pub fn clean_up_large_data(path : &str) -> Result<(), String> {
+    let dirpath = std::path::Path::new(path);
+    if !dirpath.exists() {return Ok(());}
+
+    let dir = std::fs::read_dir(dirpath).unwrap();
+    for entry in dir {
+        if let Ok(e) = &entry {
+            if let Ok(m) = e.metadata() {
+                if !m.is_file() {
+                    continue;
+                }
+
+                let fname = e.file_name();
+                let name = fname.to_str().unwrap();
+                if !name.starts_with("kifu_part_") {
+                    continue;
+                }
+                if !name.ends_with(".txt") {
+                    continue;
+                }
+
+                if let Err(emsg) = std::fs::remove_file(e.path()) {
+                    return Err(format!("remove_file:{:?} error:{emsg}", e.path()));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub fn gen_div_file_name(d : &std::path::Path, n : usize) -> std::path::PathBuf {
+    let fname = format!("kifu_part_{n:03}.txt");
+    d.join(fname)
+}
+
+/// read data and store into files.
+///
+/// # Arguments
+/// - `input_dir`
+///   a directory which contains kifu*.txt.
+/// - `output_dir`
+///   a directory which will have kifu_part_*.txt.
+/// - `div_ratio`
+///   number of division.
+///
+/// # Returns
+/// - `Ok(())`
+///   successfully done.
+/// - `Err(String)`
+///   some error occurred.
+pub fn prepare_large_data(input_dir : &str, output_dir : &str, div_ratio : i32)
+        -> Result<(), String> {
+    if input_dir.is_empty() || output_dir.is_empty() {return Ok(());}
+    if div_ratio <= 0 {
+        return Err("invalid ratio value: {div_ratio:?}".to_string());
+    }
+
+    // create output directory if it does not exist
+    let dirpath = std::path::Path::new(output_dir);
+    if !dirpath.exists() {
+        if let Err(e) = std::fs::create_dir(dirpath) {
+            return Err(
+                format!("failed to create directory: \"{output_dir}\" error:{e}"));
+        }
+    }
+
+    let (tx, rx) =
+        std::sync::mpsc::channel::<Vec<(bitboard::BitBoard, i8)>>();
+    let outdir = output_dir.to_string();
+    let div_size = div_ratio as usize;
+    // shuffle and file store
+    let th = std::thread::spawn(move|| {
+        let dirpath = std::path::Path::new(&outdir);
+        let mut rng = rand::thread_rng();
+        let mut buffers: Vec<String> = vec![String::new() ; div_size];
+        loop {
+            let data = rx.recv().unwrap();
+            if data.is_empty() {break;}
+
+            for (ban, score) in data {
+                // content: rfen,score\n
+                let text = format!("{},{score}\n", ban.to_string_short());
+                let n = rng.gen_range(0..div_size);
+                buffers[n] += &text;
+                const LIMIT_SIZE : usize = 1024 * 50;
+                if buffers[n].len() < LIMIT_SIZE {continue;}
+
+                let filepath = gen_div_file_name(dirpath, n);
+                let mut f = std::fs::OpenOptions::new()
+                    .create(true).append(true).open(filepath).unwrap();
+                f.write_all(buffers[n].as_bytes()).unwrap();
+                buffers[n].clear();
+            }
+        }
+
+        // flush remaining data
+        for (n, buf) in buffers.iter().enumerate() {
+            let filepath = gen_div_file_name(dirpath, n);
+            let mut f = std::fs::OpenOptions::new()
+                .create(true).append(true).open(filepath).unwrap();
+            f.write_all(buf.as_bytes()).unwrap();
+        }
+    });
+
+    let files = find_kifu_files(input_dir);
+    for fname in files {
+        let path = std::path::Path::new(input_dir).join(fname);
+        // eprintln!("path:{path:?}");
+        let content = std::fs::read_to_string(&path).unwrap();
+        let lines: Vec<&str> = content.split('\n').collect();
+        let kifu = kifu::Kifu::from(&lines);
+        for te in kifu.list {
+            let ban = bitboard::BitBoard::try_from(te.rfen.as_str()).unwrap();
+            // 最後の局面とか後一手の局面とかは不要
+            if ban.is_last1_or_full() {continue;}
+
+            let score = kifu.score.unwrap();
+            let ret = ban.rotated_mirrored(score);
+            if ret.is_empty() {continue;}
+
+            // ファイルに出力する
+            tx.send(ret).unwrap();
+        }
+    }
+    tx.send(Vec::new()).unwrap();
+    th.join().unwrap();
+
+    Ok(())
+}
+
+/// read data and store into files.
+///
+/// # Arguments
+/// - `input_dir`
+///   a directory which contains mate files.
+/// - `input_files`
+///   mate files
+/// - `output_dir`
+///   a directory which will have kifu_part_*.txt.
+/// - `div_ratio`
+///   number of division.
+///
+/// # Returns
+/// - `Ok(())`
+///   successfully done.
+/// - `Err(String)`
+///   some error occurred.
+pub fn prepare_large_mate(input_dir : &[String], input_files : &[String], output_dir : &str, div_ratio : i32)
+        -> Result<(), String> {
+    if output_dir.is_empty() {return Ok(());}
+    if div_ratio <= 0 {
+        return Err("invalid ratio value: {div_ratio:?}".to_string());
+    }
+
+    // create output directory if it does not exist
+    let dirpath = std::path::Path::new(output_dir);
+    if !dirpath.exists() {
+        if let Err(e) = std::fs::create_dir(dirpath) {
+            return Err(
+                format!("failed to create directory: \"{output_dir}\" error:{e}"));
+        }
+    }
+
+    let (tx, rx) =
+        std::sync::mpsc::channel::<Vec<(bitboard::BitBoard, i8)>>();
+    let outdir = output_dir.to_string();
+    let div_size = div_ratio as usize;
+    // shuffle and file store
+    let th = std::thread::spawn(move|| {
+        let dirpath = std::path::Path::new(&outdir);
+        let mut rng = rand::thread_rng();
+        let mut buffers: Vec<String> = vec![String::new() ; div_size];
+        loop {
+            let data = rx.recv().unwrap();
+            if data.is_empty() {break;}
+
+            for (ban, score) in data {
+                // content: rfen,score\n
+                let text = format!("{},{score}\n", ban.to_string_short());
+                let n = rng.gen_range(0..div_size);
+                buffers[n] += &text;
+                const LIMIT_SIZE : usize = 1024 * 50;
+                if buffers[n].len() < LIMIT_SIZE {continue;}
+
+                let filepath = gen_div_file_name(dirpath, n);
+                let mut f = std::fs::OpenOptions::new()
+                    .create(true).append(true).open(filepath).unwrap();
+                f.write_all(buffers[n].as_bytes()).unwrap();
+                buffers[n].clear();
+            }
+        }
+
+        // flush remaining data
+        for (n, buf) in buffers.iter().enumerate() {
+            let filepath = gen_div_file_name(dirpath, n);
+            let mut f = std::fs::OpenOptions::new()
+                .create(true).append(true).open(filepath).unwrap();
+            f.write_all(buf.as_bytes()).unwrap();
+        }
+    });
+
+    for inputdir in input_dir {
+        let files = find_mate_files(inputdir);
+        for fname in files {
+            let content =
+                load_mates_all(&fname).map_err(|e| format!("err:{e}"))?;
+
+            // ファイルに出力する
+            tx.send(content).unwrap();
+        }
+    }
+
+    for fname in input_files {
+        let path = std::env::current_dir().unwrap().join(fname);
+        let content =
+            load_mates_all(path.to_str().unwrap())
+                .map_err(|e| format!("err:{e}"))?;
+
+        // ファイルに出力する
+        tx.send(content).unwrap();
+    }
+
+    tx.send(Vec::new()).unwrap();
+    th.join().unwrap();
+
+    Ok(())
+}
 
 /// list up files
 ///
@@ -127,7 +359,7 @@ pub fn loadkifu(files : &[String], d : &str, progress : usize,
     boards
 }
 
-fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
+fn read_mate_file_augmentation(buf : impl std::io::BufRead, progress : usize)
         -> Result<Vec<(bitboard::BitBoard, i8)>, String> {
     let mut ret = Vec::new();
 
@@ -135,20 +367,22 @@ fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
         match line {
             Err(e) => {return Err(format!("{e}"))},
             Ok(l) => {
-                // コメント行 or 11文字未満
-                if l.len() < 11 || l.starts_with("#") {continue;}
+                // コメント行 or 7文字未満
+                if l.len() < 7 || l.starts_with("#") {continue;}
+
                 // rfen,score
                 let elem : Vec<&str> = l.split(",").collect();
                 if elem.len() < 2 {
                     return Err(format!("# of elem < 2 w/ {l}!"));
                 }
+
                 let ban = match bitboard::BitBoard::try_from(elem[0]) {
                     Ok(b) => {b},
                     Err(msg) => {
                         return Err(format!("error: {msg} @ {}", elem[0]));
                     },
                 };
-                if !ban.is_progress(progress) {continue;}
+                if progress != PROGRESS_ALLOW_ALL && !ban.is_progress(progress) {continue;}
 
                 // let (b, w) = ban.fixedstones();
                 let score = match elem[1].parse::<i8>() {
@@ -157,17 +391,75 @@ fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
                     },
                     Ok(num) => {num},
                 };
-                const AUGMENTATION_READ_MATE : bool = true;
-                if AUGMENTATION_READ_MATE {
-                    ret.append(&mut ban.rotated_mirrored(score));
-                } else {
-                    ret.push((ban, score));
-                }
+
+                ret.append(&mut ban.rotated_mirrored(score));
             }
         }
     }
 
     Ok(ret)
+}
+
+fn read_mate_file(buf : impl std::io::BufRead, progress : usize)
+        -> Result<Vec<(bitboard::BitBoard, i8)>, String> {
+    let mut ret = Vec::new();
+
+    for line in buf.lines() {
+        match line {
+            Err(e) => {return Err(format!("{e}"))},
+            Ok(l) => {
+                // コメント行 or 7文字未満
+                if l.len() < 7 || l.starts_with("#") {continue;}
+
+                // rfen,score
+                let elem : Vec<&str> = l.split(",").collect();
+                if elem.len() < 2 {
+                    return Err(format!("# of elem < 2 w/ {l}!"));
+                }
+
+                let ban = match bitboard::BitBoard::try_from(elem[0]) {
+                    Ok(b) => {b},
+                    Err(msg) => {
+                        return Err(format!("error: {msg} @ {}", elem[0]));
+                    },
+                };
+                if progress != PROGRESS_ALLOW_ALL && !ban.is_progress(progress) {continue;}
+
+                // let (b, w) = ban.fixedstones();
+                let score = match elem[1].parse::<i8>() {
+                    Err(msg) => {
+                        return Err(format!("error: parse score : {msg}"));
+                    },
+                    Ok(num) => {num},
+                };
+
+                ret.push((ban, score));
+            }
+        }
+    }
+
+    Ok(ret)
+}
+
+pub fn load_mates_augmentation(path : &str, progress : usize)
+        -> Result<Vec<(bitboard::BitBoard, i8)>, String> {
+    let filepath = std::path::Path::new(path);
+    if !filepath.exists() {return Err(format!("{path} does NOT exist!"));}
+
+    if path.ends_with(".zst") || path.ends_with(".zstd") {
+        let f = std::fs::File::open(path)
+            .map_err(|e| format!("error: {e} @ File::open"))?;
+        let z = zstd::Decoder::new(f)
+            .map_err(|e| format!("error: {e} @ zstd::Decoder::new"))?;
+
+        let buf = std::io::BufReader::new(z);
+        read_mate_file_augmentation(buf, progress)
+    } else {
+        let f = std::fs::File::open(path).map_err(|e| format!("{e}"))?;
+
+        let buf = std::io::BufReader::new(f);
+        read_mate_file_augmentation(buf, progress)
+    }
 }
 
 pub fn load_mates(path : &str, progress : usize)
@@ -191,18 +483,35 @@ pub fn load_mates(path : &str, progress : usize)
     }
 }
 
-pub fn dedupboards(boards : &mut Vec<(bitboard::BitBoard, i8)>,
-                   log : &mut std::fs::File, show_path : bool) {
+fn load_mates_all(path : &str)
+        -> Result<Vec<(bitboard::BitBoard, i8)>, String> {
+    let filepath = std::path::Path::new(path);
+    if !filepath.exists() {return Err(format!("{path} does NOT exist!"));}
+
+    if path.ends_with(".zst") || path.ends_with(".zstd") {
+        let f = std::fs::File::open(path)
+            .map_err(|e| format!("error: {e} @ File::open"))?;
+        let z = zstd::Decoder::new(f)
+            .map_err(|e| format!("error: {e} @ zstd::Decoder::new"))?;
+
+        let buf = std::io::BufReader::new(z);
+        read_mate_file_augmentation(buf, PROGRESS_ALLOW_ALL)
+    } else {
+        let f = std::fs::File::open(path).map_err(|e| format!("{e}"))?;
+
+        let buf = std::io::BufReader::new(f);
+        read_mate_file_augmentation(buf, PROGRESS_ALLOW_ALL)
+    }
+}
+
+pub fn dedup_boards(boards : &mut Vec<(bitboard::BitBoard, i8)>) {
     // println!("board: {} boards", boards.len());
     // let sta = std::time::Instant::now();
     boards.sort_by(|a, b| {
         a.0.partial_cmp(&b.0).unwrap()
     });
-    boards.dedup_by(|a, b| {a == b});
+    boards.dedup();
     // println!("{}usec",sta.elapsed().as_micros());
-    let msg = format!("board: {} boards\n", boards.len());
-    log.write_all(msg.as_bytes()).unwrap();
-    if show_path {print!("{msg}");}
 }
 
 pub fn extractboards(boards : &[(bitboard::BitBoard, i8)])

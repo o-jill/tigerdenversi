@@ -7,31 +7,84 @@ use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
 
 const INPUTSIZE :i64 = weight::N_INPUT as i64;
 const MIN_COSANEAL : f64 = 1e-4;
+const LARGEDATA_CHUNK_SIZE : usize = 2;
+enum LargeRatioIndex {
+    Div = 0,
+    Train = 1,
+    Eval = 2,
+    Size = 3,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum Part {
+    Off = 0,
+    On = 1,
+    Large = 2,
+}
+
+impl std::convert::From<&str> for Part {
+    fn from(txt: &str) -> Self {
+        if txt.is_empty() {return Part::Off;}
+
+        let disable = [/*"", */"0", "false", "no", "none", "off", "zero"];
+        let large = "large";
+
+        let txt_lo = txt.to_lowercase();
+
+        if disable.contains(&txt_lo.trim()) {
+            Part::Off
+        } else if txt_lo == large {
+            Part::Large
+        } else {
+            Part::On
+        }
+    }
+}
+
+impl Part {
+    pub fn is_off(&self) -> bool {
+        *self == Part::Off
+    }
+
+    #[allow(dead_code)]
+    pub fn is_on(&self) -> bool {
+        *self == Part::On
+    }
+
+    pub fn is_large(&self) -> bool {
+        *self == Part::Large
+    }
+}
 
 pub struct Training {
-    trainingpart : Vec<bool>,
-    kifudir : Vec<String>,
-    matedir : Vec<String>,
-    matefiles : String,
-    devtype : String,
-    device : tch::Device,
+    // training parameters
     autostop : Option<f64>,
+    anealing_step : i32,
+    awdecay : f64,
+    device : tch::Device,
+    devtype : String,
     epoch : usize,
     eta : f64,
     minibatch : i64,
     period : i32,
-    anealing_step : i32,
-    stopwatch : std::time::Instant,
     testratio : i64,
+    trainingpart : Vec<Part>,
     warmup : usize,
     wdecay : f64,
-    awdecay : f64,
     weights : weight::Weight,
-    multibar : MultiProgress,
+    // training data
+    kifudir : Vec<String>,
+    matedir : Vec<String>,
+    matefiles : Vec<String>,
+    large_dir : String,
+    large_ratio : [i32 ; LargeRatioIndex::Size as usize],
+    // ui, log
     log : std::fs::File,
     loss_curve : Vec<f64>,
-    show_progressbar : bool,
+    multibar : MultiProgress,
     show_graph : bool,
+    show_progressbar : bool,
+    stopwatch : std::time::Instant,
 }
 
 impl std::fmt::Display for Training {
@@ -70,7 +123,7 @@ impl From<argument::Arg> for Training {
                 arg.kifudir
             };
         let matedir = arg.matedir;
-        let matefiles = arg.mate_file.unwrap_or_default();
+        let matefiles = arg.mate_file;
         let devtype = arg.device.unwrap_or("cpu".to_string());
         let devtype = devtype.clone();
         let device    = if devtype == "mps" && tch::utils::has_mps() {
@@ -88,6 +141,11 @@ impl From<argument::Arg> for Training {
             if let Err(err) = weights.read(&awei) {
                 panic!("{err}");
             }
+        }
+        let large_dir = arg.large_dir.unwrap_or_default();
+        let mut large_ratio = [0 ; 3];
+        if arg.large_ratio.len() == LargeRatioIndex::Size as usize {
+            large_ratio.copy_from_slice(&arg.large_ratio);
         }
 
         Self {
@@ -116,6 +174,8 @@ impl From<argument::Arg> for Training {
                     weight::N_PROGRESS_DIV * (arg.warmup + arg.epoch)),
             show_progressbar : arg.progressbar,
             show_graph : arg.graph,
+            large_dir,
+            large_ratio
         }
     }
 }
@@ -137,25 +197,19 @@ impl Training {
     /// ex. "" becomes [true, true, true]
     /// ex. "1,,0" becomes [true, false, false]
     /// ex. "-1,false,zero" becomes [true, false, false]
-    fn partlist(part : &Option<String>) -> Vec<bool> {
-        let mut ret = vec![true ; weight::N_PROGRESS_DIV];
+    fn partlist(part : &Option<String>) -> Vec<Part> {
+        let mut ret = vec![Part::On ; weight::N_PROGRESS_DIV];
         if part.is_none() {return ret;}
 
         let txt = part.as_ref().unwrap();
         if txt.is_empty() {return ret;}
 
-        let disable = [/*"", */"0", "false", "no", "none", "off", "zero"];
-        let txt_lo = txt.to_lowercase();
         // println!("txt_lo:{txt_lo}, txt:[{txt}]");
-        for (i, elem) in txt_lo.split(',').enumerate() {
+        for (i, elem) in txt.split(',').enumerate() {
             // println!("elem:[{elem}]");
             if i >= weight::N_PROGRESS_DIV {break;}
-            if elem.is_empty() {
-                ret[i] = false;
-                continue;
-            }
 
-            ret[i] = !disable.contains(&elem);
+            ret[i] = elem.into();
         }
         ret
     }
@@ -251,7 +305,7 @@ impl Training {
                     if !fname.starts_with("mate") {return Vec::new();}
 
                     let path = std::path::Path::new(d).join(fname);
-                    match data_loader::load_mates(&path.display().to_string(), progress) {
+                    match data_loader::load_mates_augmentation(&path.display().to_string(), progress) {
                         Ok(arr) => {arr},
                         Err(msg) => {panic!("{msg}")},
                     }
@@ -261,20 +315,22 @@ impl Training {
         }
 
         if !self.matefiles.is_empty() {
-            let mut mates = self.matefiles.split(",").flat_map(
+            let mut mates = self.matefiles.iter().flat_map(
                 |path| {
                     if let Some(pb) = pb {pb.inc(1);}
-                    match data_loader::load_mates(path, progress) {
+                    match data_loader::load_mates_augmentation(path, progress) {
                         Ok(arr) => {arr},
                         Err(msg) => {panic!("{msg}")},
                     }
                 }
             ).collect::<Vec<_>>();
-            self.putlog(&format!("mates : {} size:{}", self.matefiles, mates.len()));
+            self.putlog(&format!("mates : {:?} size:{}", self.matefiles, mates.len()));
             if !mates.is_empty() {boards.append(&mut mates);}
         }
 
-        data_loader::dedupboards(&mut boards, &mut self.log, pb.is_none());
+        data_loader::dedup_boards(&mut boards);
+        self.putlog(&format!("board: {} boards\n", boards.len()));
+
         boards.shuffle(&mut rand::thread_rng());
         // println!("{}msec",sta.elapsed().as_millis());
         if let Some(pb) = pb {pb.inc(1);}
@@ -316,6 +372,63 @@ impl Training {
         }
     }
 
+    /// read split large dataset
+    ///
+    /// # Arguments
+    /// - `indexes` an array of indexes of split large dataset to read
+    /// - `progress` index of the progress to read
+    /// - `pb` ProgressBar
+    ///
+    /// # Returns
+    /// (input Tensor, output Tensor)
+    fn prepare_large_dataset(&mut self,
+        indexes : &[usize], progress : usize, pb : &Option<ProgressBar>)
+            -> (tch::Tensor, tch::Tensor) {
+        // let sta = std::time::Instant::now();
+        let mut boards : Vec<_> = indexes.iter().flat_map(|&index| {
+            if let Some(pb) = pb {
+                pb.inc(1);
+                // pb.set_message(format!("loading idx {index}"));
+            }
+
+            let dirpath = std::path::Path::new(&self.large_dir);
+            let path = data_loader::gen_div_file_name(dirpath, index);
+            data_loader::load_mates(path.to_str().unwrap(), progress)
+                .unwrap_or_else(|e| {
+                    panic!("{e} in load mates in prepare_large_dataset")
+                })
+        }).collect::<Vec<(bitboard::BitBoard, i8)>>();
+
+        data_loader::dedup_boards(&mut boards);
+        // self.putlog(&format!("board: {} boards\n", boards.len()));
+
+        // boards.shuffle(&mut rand::thread_rng());
+        // println!("{}msec",sta.elapsed().as_millis());
+        if let Some(pb) = pb {pb.inc(1);}
+
+        // eliminate boards because of RAM size
+        // const LARGE_NUMBER_OF_BOARDS : usize = 1024 * 1024 * 128;
+        // if boards.len() > LARGE_NUMBER_OF_BOARDS {
+        //     self.putlog(&format!(
+        //         "board size:{} exceeds limit({LARGE_NUMBER_OF_BOARDS})",
+        //         boards.len()));
+        //     boards.truncate(LARGE_NUMBER_OF_BOARDS);
+        //     boards.shrink_to_fit();
+        // }
+
+        let input = tch::Tensor::from_slice(
+            &data_loader::extractboards(&boards)).view((boards.len() as i64, INPUTSIZE));
+        // self.putlog(&format!("input : {} {:?}", input.dim(), input.size()));
+
+        let target = tch::Tensor::from_slice(
+            &data_loader::extractscore(&boards)).view((boards.len() as i64, 1));
+        // self.putlog(&format!("target: {} {:?}", target.dim(), target.size()));
+
+        if let Some(pb) = pb {pb.inc(1);}
+
+        (input, target)
+    }
+
     fn warmup_sequence(&mut self, nnet : &impl nn::Module,
             vs : &mut VarStore, optm : &mut tch::nn::Optimizer,
             inputs : &[Tensor], targets : &[Tensor], minibatch : i64) {
@@ -344,8 +457,11 @@ impl Training {
                 if i == iloss {continue;}
 
                 let mut dataset = Iter2::new(inp, tar, minibatch);
-                // let dataset = dataset.shuffle();
-                let dataset = dataset.shuffle().to_device(vs.device());
+                let dataset = if vs.device() == Device::Cpu {
+                    dataset.shuffle()
+                } else {
+                    dataset.shuffle().to_device(vs.device())
+                };
                 for (xs, ys) in dataset {
                     // println!("xs: {} {:?} ys: {} {:?}",
                     //          xs.dim(), xs.size(), ys.dim(), ys.size());
@@ -367,6 +483,79 @@ impl Training {
             self.update(testloss, &pb, wep, elapsed);
         }
         if let Some(pb) = pb {
+            pb.finish_with_message(format!("warm up - done! final loss:{final_loss:.3}"));
+        }
+    }
+
+    fn warmup_sequence_large(&mut self, nnet : &impl nn::Module,
+            vs : &mut VarStore, optm : &mut tch::nn::Optimizer,
+            minibatch : i64, progress : usize) {
+        if self.is_not_warmup() {return;}
+
+        let pb = if self.show_progressbar {
+            let pb = self.multibar.add(
+                ProgressBar::new(self.progressbar_max(self.warmup)));
+            pb.set_style(
+                ProgressStyle::with_template(
+                "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
+                .progress_chars("🔥🔥🪵"));
+            Some(pb)
+        } else {
+            None
+        };
+
+        // let testratio = inputs.len();
+        let mut final_loss = 0f64;
+
+        for wep in 0..self.warmup {
+            let (train_idx, eval_idx) = self.gen_largedata_index().unwrap();
+
+            let eta = self.eta;
+            let w_eta_min = eta * MIN_COSANEAL;
+            let a = (eta - w_eta_min) / self.warmup as f64;
+            optm.set_lr(w_eta_min + a * wep as f64);
+
+            // LARGEDATA_CHUNK_SIZEファイルずつ
+            for (idx, indices) in train_idx.chunks(LARGEDATA_CHUNK_SIZE).enumerate() {
+                let (inputs, targets) =
+                    self.prepare_large_dataset(indices, progress, &pb);
+
+                if let Some(pb) = &pb {
+                    pb.set_message(format!("{idx}/{} ep:{wep}/{}", train_idx.len(), self.warmup));
+                }
+                let mut dataset = Iter2::new(&inputs, &targets, minibatch);
+                let dataset = if vs.device() == Device::Cpu {
+                    dataset.shuffle()
+                } else {
+                    dataset.shuffle().to_device(vs.device())
+                };
+                for (xs, ys) in dataset {
+                    // println!("xs: {} {:?} ys: {} {:?}",
+                    //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                    let loss =
+                        nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                    optm.backward_step(&loss);
+                }
+            }
+
+            let testloss = if eval_idx.is_empty() {
+                    0f64
+                } else {
+                    let (inputs, targets) =
+                        self.prepare_large_dataset(&eval_idx, progress, &pb);
+                    let loss = nnet.forward(&inputs)
+                            .mse_loss(&targets, tch::Reduction::Mean);
+                    loss.double_value(&[])
+                };
+
+            let elapsed = self.elapsed();
+
+            final_loss = testloss;
+            self.loss_curve.push(testloss);
+            self.update(testloss, &pb, wep, elapsed);
+        }
+
+        if let Some(pb) = &pb {
             pb.finish_with_message(format!("warm up - done! final loss:{final_loss:.3}"));
         }
     }
@@ -419,8 +608,11 @@ impl Training {
                 if i == iloss {continue;}
 
                 let mut dataset = Iter2::new(inp, tar, minibatch);
-                // let dataset = dataset.shuffle();
-                let dataset = dataset.shuffle().to_device(vs.device());
+                let dataset = if vs.device() == Device::Cpu {
+                    dataset.shuffle()
+                } else {
+                    dataset.shuffle().to_device(vs.device())
+                };
                 for (xs, ys) in dataset {
                     // println!("xs: {} {:?} ys: {} {:?}",
                     //          xs.dim(), xs.size(), ys.dim(), ys.size());
@@ -483,6 +675,125 @@ impl Training {
         }
     }
 
+    fn cos_anealing_sequence_large(&mut self, nnet : &impl nn::Module,
+            vs : &mut VarStore, optm : &mut tch::nn::Optimizer,
+            minibatch : i64, progress : usize) {
+        let pb = if self.show_progressbar {
+            let pb = self.multibar.add(
+                ProgressBar::new(self.progressbar_max(self.epoch)));
+            pb.set_style(
+                ProgressStyle::with_template(
+                "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
+                .progress_chars("📗📖📓"));
+            Some(pb)
+        } else {
+            None
+        };
+        let mut sum_loss_prev = 99999999.9;
+        let mut sum_loss = 0.0;
+        let mut final_loss = 0f64;
+        let testratio = self.testratio as usize;
+        let mut actual_epochs = self.epoch;
+        self.anealing_step = 0;
+        for ep in 0..self.epoch * 2 {
+            let (train_idx, eval_idx) = self.gen_largedata_index().unwrap();
+
+            let iloss = if testratio > 1 {ep % testratio} else {99999};
+            let (new_lr, next_step) = self.anealing_learning_rate(ep);
+            // stop automatically after desinated epoch
+            // and after learning w/ minimum learning rate.
+            if next_step && ep >= self.epoch {
+                actual_epochs = ep;
+                // self.putlog(&format!(
+                //     "next_step && ep >= self.epoch: {next_step} {ep}"));
+                break;
+            }
+
+            optm.set_lr(new_lr);
+            // LARGEDATA_CHUNK_SIZEファイルずつ
+            for (idx, indices) in train_idx.chunks(LARGEDATA_CHUNK_SIZE).enumerate() {
+                let (inputs, targets) =
+                    self.prepare_large_dataset(indices, progress, &pb);
+
+                if let Some(pb) = &pb {
+                    pb.set_message(
+                        format!("{idx}/{} ep:{ep}/{}",
+                            train_idx.len().div_ceil(LARGEDATA_CHUNK_SIZE),
+                            self.epoch));
+                }
+                let mut dataset = Iter2::new(&inputs, &targets, minibatch);
+                let dataset = if vs.device() == Device::Cpu {
+                    dataset.shuffle()
+                } else {
+                    dataset.shuffle().to_device(vs.device())
+                };
+                for (xs, ys) in dataset {
+                    // println!("xs: {} {:?} ys: {} {:?}",
+                    //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                    let loss =
+                        nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                    optm.backward_step(&loss);
+                }
+            }
+            let testloss = if eval_idx.is_empty() {
+                    0f64
+                } else {
+                    let (inputs, targets) =
+                        self.prepare_large_dataset(&eval_idx, progress, &pb);
+                    let loss = nnet.forward(&inputs)
+                            .mse_loss(&targets, tch::Reduction::Mean);
+                    loss.double_value(&[])
+                };
+            let elapsed = self.elapsed();
+            final_loss = testloss;
+            self.loss_curve.push(testloss);
+            self.update(testloss, &pb, ep + self.warmup, elapsed);
+            // 学習を始めたけどロスが大きいときはなにかおかしい
+            if ep >  5 {
+                // 少なくとも300を超えてるときはおかしい
+                const WARNING_THRESHOLD : f64 = 300f64;
+                if testloss > WARNING_THRESHOLD {
+                    let msg = format!("loss:{testloss}, ep:{ep}, lr:{new_lr}");
+                    eprintln!("{msg}");
+                    self.putlog(&msg);
+                    let msg = format!(
+                        "ep: {ep} iloss: {iloss} input_mean: ??? target_mean: ???");
+                    // let msg = format!(
+                    //     "ep: {ep} iloss: {iloss} input_mean: {:.3} target_mean: {:.3}",
+                    //     inputs[iloss].mean(Kind::Float).double_value(&[]),
+                    //     targets[iloss].mean(Kind::Float).double_value(&[]));
+                    eprintln!("{msg}");
+                    self.putlog(&msg);
+                    // panic!("{msg}");
+                }
+            }
+
+            if self.autostop.is_none() {continue;}
+
+            let threshold = self.autostop.unwrap();
+            sum_loss += testloss;
+            let testratio = self.testratio;
+            if (ep + 1) % (testratio as i32 * self.period) as usize == 0 {
+                let msg = format!("sum_loss{}:{sum_loss}", ep + 1);
+                self.putlog(&msg);
+
+                if  sum_loss_prev - sum_loss > threshold {
+                    sum_loss_prev = sum_loss;
+                    sum_loss = 0.0;
+                } else {
+                    println!("done as a result of learning enough.");
+                    break;
+                }
+            }
+        }
+        if let Some(pb) = pb {
+            pb.set_length(actual_epochs as u64);
+            pb.set_position(actual_epochs as u64);
+            pb.finish_with_message(
+                format!("cos anealing - done! final loss:{final_loss:.3}"));
+        }
+    }
+
     fn std_sequence(&mut self, nnet : &impl nn::Module,
             vs : &mut VarStore, optm : &mut tch::nn::Optimizer,
             inputs : &[Tensor], targets : &[Tensor], minibatch : i64) {
@@ -504,8 +815,11 @@ impl Training {
                 if i == iloss {continue;}
 
                 let mut dataset = Iter2::new(inp, tar, minibatch);
-                // let dataset = dataset.shuffle();
-                let dataset = dataset.shuffle().to_device(vs.device());
+                let dataset = if vs.device() == Device::Cpu {
+                    dataset.shuffle()
+                } else {
+                    dataset.shuffle().to_device(vs.device())
+                };
                 // let mut loss = tch::Tensor::new();
                 for (xs, ys) in dataset {
                     // println!("xs: {} {:?} ys: {} {:?}",
@@ -528,6 +842,59 @@ impl Training {
         }
     }
 
+    fn std_sequence_large(&mut self, nnet : &impl nn::Module,
+            vs : &mut VarStore, optm : &mut tch::nn::Optimizer,
+            minibatch : i64, progress : usize) {
+        let pb = if self.show_progressbar {
+            let pb = self.multibar.add(
+            ProgressBar::new(self.epoch as u64));
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}] {wide_bar} [{eta_precise}] {pos}/{len} {msg}").unwrap()
+                .progress_chars("📗📖📓"));
+            Some(pb)
+        } else {
+            None
+        };
+        let testratio = self.testratio as usize;
+        for ep in 0..self.epoch {
+            let (train_idx, eval_idx) = self.gen_largedata_index().unwrap();
+
+            for i in 0..train_idx.len() {
+                let (inputs, targets) =
+                    self.prepare_large_dataset(
+                        &train_idx[i..i + 1], progress, &pb);
+
+                let mut dataset = Iter2::new(&inputs, &targets, minibatch);
+                let dataset = if vs.device() == Device::Cpu {
+                    dataset.shuffle()
+                } else {
+                    dataset.shuffle().to_device(vs.device())
+                };
+                // let mut loss = tch::Tensor::new();
+                for (xs, ys) in dataset {
+                    // println!("xs: {} {:?} ys: {} {:?}",
+                    //          xs.dim(), xs.size(), ys.dim(), ys.size());
+                    let loss =
+                        nnet.forward(&xs).mse_loss(&ys, tch::Reduction::Mean);
+                    optm.backward_step(&loss);
+                }
+            }
+            let testloss = if testratio == 0 {
+                0f64
+            } else {
+                let (inputs, targets) =
+                    self.prepare_large_dataset(&eval_idx, progress, &pb);
+                let loss = nnet.forward(&inputs)
+                        .mse_loss(&targets, tch::Reduction::Mean);
+                loss.double_value(&[])
+            };
+            let elapsed = self.elapsed();
+            self.loss_curve.push(testloss);
+            self.update(testloss, &pb, ep, elapsed);
+        }
+    }
+
     fn start_time(&mut self) {
         self.stopwatch = std::time::Instant::now();
     }
@@ -536,111 +903,336 @@ impl Training {
         self.stopwatch.elapsed()
     }
 
+    /// 学習データを複数のファイルに分割してから学習を始めるかどうか
+    fn is_large_data_mode(&self) -> bool {
+        let div = self.large_ratio[LargeRatioIndex::Div as usize];
+        let train = self.large_ratio[LargeRatioIndex::Train as usize];
+        let eval = self.large_ratio[LargeRatioIndex::Eval as usize];
+        !self.large_dir.is_empty()  // 出力先の指定あり
+            && div > 1  // 2つ以上に分ける
+            && train > 0  // 1つは絶対に必要
+            && eval > 0  // 1つは絶対に必要
+            && div >= train + eval
+    }
+
+    fn large_division_size(&self) -> usize {
+        self.large_ratio[LargeRatioIndex::Div as usize] as usize
+    }
+
+    fn large_training_size(&self) -> usize {
+        self.large_ratio[LargeRatioIndex::Train as usize] as usize
+    }
+
+    fn large_training_chunk_size(&self) -> usize {
+        (self.large_ratio[LargeRatioIndex::Train as usize] as usize)
+            .div_ceil(LARGEDATA_CHUNK_SIZE)
+    }
+
+    fn large_eval_size(&self) -> usize {
+        self.large_ratio[LargeRatioIndex::Eval as usize] as usize
+    }
+
+    fn progressbar_max(&self, epoch : usize) -> u64 {
+        let tr = self.large_training_chunk_size();
+        let ev = self.large_eval_size();
+        (epoch * (1 + 4 * tr + 3 * ev)) as u64
+        // 21216/16864 1/20 ep:482/496
+        // 21220/16864 2/20 ep:482/496
+        // 21256/16864 0/20 ep:483/496
+        // 21260/16864 1/20 ep:483/496   44
+        // 21264/16864 2/20 ep:483/496
+    }
+
+    /// generate indexes for training and loss evaluation.
+    ///
+    /// # Returns
+    /// (indexes for training, indexes for loss evaluation)
+    fn gen_largedata_index(&self) -> Option<(Vec<usize>, Vec<usize>)> {
+        let div_ratio = self.large_division_size();
+        let train_file_size = self.large_training_size();
+        let eval_file_size = self.large_eval_size();
+
+        if div_ratio == 0 || div_ratio < train_file_size + eval_file_size {
+            return None;
+        }
+
+        let mut numbers = (0..div_ratio).collect::<Vec<_>>();
+        let mut rng = rand::thread_rng();
+        numbers.shuffle(&mut rng);
+
+        let train_idx = numbers[0..train_file_size].to_vec();
+        let eval_idx = numbers[train_file_size..train_file_size + eval_file_size].to_vec();
+
+        Some((train_idx, eval_idx))
+    }
+
+    /// run training
     pub fn run(&mut self) -> Result<(), tch::TchError> {
         let pbtop = if self.show_progressbar {
             let pb = self.multibar.add(
-            ProgressBar::new(weight::N_PROGRESS_DIV as u64));
+            ProgressBar::new(weight::N_PROGRESS_DIV as u64 + 2));
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len}").unwrap());
+
             Some(pb)
         } else {
             None
         };
 
-        self.anealing_step = 0;
-
-        let trainingpart = self.trainingpart.clone();
-        for (progress, en) in trainingpart.iter().enumerate() {
-            if let Some(pb ) = &pbtop {pb.inc(1);}
-            if !*en {
+        if let Some(pb ) = &pbtop {pb.inc(1);}
+        let partlist = self.trainingpart.clone();
+        for (progress, p) in partlist.iter().enumerate() {
+            if p.is_off() {
                 let msg = format!("progress[{progress}] skipped.");
                 println!("{msg}");
                 self.putlog(&msg);
                 continue;
             }
-            let pbchild = if self.show_progressbar {
-                let pb = self.multibar.add(
-                    ProgressBar::new(
-                        {
-                            let steps =
-                                self.matedir.len() + self.kifudir.len() + 7;
-                            if self.matefiles.is_empty() {
-                                steps
-                            } else {
-                                self.matefiles.chars().fold(steps + 1,
-                                |acc, c| if c == ',' {acc + 1} else {acc})
-                            }
-                        } as u64));
-                pb.set_style(
-                    ProgressStyle::with_template(
-                        "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
-                    .progress_chars("🪵🪓🌴"));
-                pb.set_message("loading data...");
-                Some(pb)
+
+            if p.is_large() {
+                if self.is_large_data_mode() {
+                    self.run_large_dataset(progress, &pbtop)?;
+                } else {
+                    let div = self.large_ratio[LargeRatioIndex::Div as usize];
+                    let train = self.large_ratio[LargeRatioIndex::Train as usize];
+                    let eval = self.large_ratio[LargeRatioIndex::Eval as usize];
+                    let large_dir = &self.large_dir;
+                    eprintln!("invalid data mode!");
+                    eprintln!("large_dir:{large_dir}");
+                    eprintln!("div,train,eval:{div},{train},{eval}");
+                    return Err(tch::TchError::Torch("invalid data mode!".to_string()));
+                }
             } else {
-                None
-            };
-            let (input, target) = self.prepare_data(progress, &pbchild);
-            let inputs = input.chunk(self.testratio, 0);
-            let targets = target.chunk(self.testratio, 0);
-            if let Some(pb) = &pbchild {pb.inc(1);}
-
-            let mut vs = VarStore::new(self.device);
-            let nnet = neuralnet::net(&vs.root());
-
-            if let Err(err) = neuralnet::load(&mut vs, &self.weights, progress) {
-                panic!("{err}");
+                self.run_normal(progress, &pbtop)?;
             }
 
-            if let Some(pb) = &pbchild {pb.inc(1);}
-            let mut optm = nn::AdamW::default().build(&vs, self.eta)?;
-            optm.set_weight_decay(self.wdecay);
-
-            self.putlog(&
-                vs.variables().iter().map(|(key, t)| {
-                    format!("{key}:{:?}\n", t.size())
-                }).collect::<Vec<String>>().join(""));
-            let datasize = target.size()[0];
-            
-            let minibatch = self.adjust_minibatch(datasize);
-            
-            let msg = format!("auto stop:{:?}\n", self.autostop)
-                + &format!("datasize: {datasize}\n")
-                + &format!("devtype: {}\n", self.devtype)
-                + &format!("cosine aneaing:{}\n", self.period)
-                + &format!("epoch:{}\n", self.epoch)
-                + &format!("eta:{}\n", self.eta)
-                + &format!("mini batch: {minibatch}\n")
-                + &format!("test ratio:{}\n", self.testratio)
-                + &format!("training part: {:?}\n", self.trainingpart)
-                + &format!("warmup: {}\n", self.warmup)
-                + &format!("weight decay:{}\n", self.wdecay);
-            self.putlog(&msg);
-            if let Some(pb) = &pbchild {
-                pb.finish_with_message(
-                    format!("preparing {progress} - done!"));
-            }
-
-            self.start_time();
-
-            if self.is_cos_anealing() {  // cos anealing
-                self.warmup_sequence(
-                    &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
-
-                self.cos_anealing_sequence(
-                    &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
-            } else {
-                self.std_sequence(
-                    &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
-            }
-            // println!();
-
-            // VarStore to weights
-            neuralnet::storeweights(&mut self.weights, vs, progress);
+            if let Some(pb ) = &pbtop {pb.inc(1);}
         }
-        if let Some(pb ) = &pbtop {pb.finish();}
 
         neuralnet::writeweights(&self.weights);
 
+        if let Some(pb ) = &pbtop {pb.inc(1);}
+        if let Some(pb ) = &pbtop {pb.finish();}
+
         self.plot_loss();
+
+        Ok(())
+    }
+
+    /// clean-up destination directory, load kifu and mate files
+    /// and separate them into files.
+    ///
+    /// - destination directory: `self.large_dir`
+    /// - source kifu files: `self.kifudir`
+    /// - mate files: `self.matedir` and`self.matefiles`
+    /// - \# of division: `self.large_ratio[LargeRatioIndex::Div]`
+    fn split_large_dataset(&mut self, pbsplit : &Option<ProgressBar>) -> Result<(), String> {
+        // clean up
+        self.putlog("clean_up_large_data");
+        if let Some(pb) = pbsplit {
+            pb.inc(1);
+            pb.set_message("cleaning up large data ...");
+        }
+        data_loader::clean_up_large_data(&self.large_dir)?;
+
+        let div_ratio = self.large_division_size() as i32;
+
+        // load kifu
+        self.putlog("load_large_kifu");
+        if let Some(pb) = pbsplit {
+            pb.inc(1);
+            pb.set_message("loading large kifu ...");
+        }
+        for kifudir in self.kifudir.iter() {
+            data_loader::prepare_large_data(
+                kifudir, &self.large_dir, div_ratio)?;
+        }
+
+        // load mate
+        self.putlog("load_large_mate");
+        if let Some(pb) = pbsplit {
+            pb.inc(1);
+            pb.set_message("loading large mate ...");
+        }
+        data_loader::prepare_large_mate(
+            &self.matedir, &self.matefiles, &self.large_dir, div_ratio)?;
+
+        Ok(())
+    }
+
+    /// 学習データを複数のファイルに分割してから学習するモード
+    ///
+    /// # Arguments
+    /// - `progress`: progress of the game.
+    /// - `pbtop`: progressbar
+    fn run_large_dataset(
+        &mut self, progress : usize, pbtop : &Option<ProgressBar>)
+            -> Result<(), tch::TchError> {
+
+        self.anealing_step = 0;
+
+        let pbchild = if pbtop.is_some() {
+            let pb = self.multibar.add(
+                ProgressBar::new(
+                    {
+                        let steps =
+                            self.matedir.len() + self.kifudir.len() + 7;
+                        steps + self.matefiles.len()
+                    } as u64));
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
+                .progress_chars("🪵🪓🌴"));
+            pb.set_message("loading data...");
+            Some(pb)
+        } else {
+            None
+        };
+
+        self.putlog("large mode:");
+        // prepare dataset
+        self.split_large_dataset(&pbchild).map_err(tch::TchError::Torch)?;
+
+        if let Some(pb) = &pbchild {pb.inc(1);}
+
+        let mut vs = VarStore::new(self.device);
+        let nnet = neuralnet::net(&vs.root());
+
+        if let Err(err) = neuralnet::load(&mut vs, &self.weights, progress) {
+            panic!("{err}");
+        }
+
+        if let Some(pb) = &pbchild {pb.inc(1);}
+        let mut optm = nn::AdamW::default().build(&vs, self.eta)?;
+        optm.set_weight_decay(self.wdecay);
+
+        self.putlog(&
+            vs.variables().iter().map(|(key, t)| {
+                format!("{key}:{:?}\n", t.size())
+            }).collect::<Vec<String>>().join(""));
+        let datasize = 0;  // target.size()[0];
+
+        let minibatch = self.minibatch;  // adjust_minibatch(datasize);
+
+        let msg = format!("auto stop:{:?}\n", self.autostop)
+            + &format!("datasize: {datasize}\n")
+            + &format!("devtype: {}\n", self.devtype)
+            + &format!("cosine aneaing:{}\n", self.period)
+            + &format!("epoch:{}\n", self.epoch)
+            + &format!("eta:{}\n", self.eta)
+            + &format!("mini batch: {minibatch}\n")
+            + &format!("test ratio:{}\n", self.testratio)
+            + &format!("training part: {:?}\n", self.trainingpart)
+            + &format!("warmup: {}\n", self.warmup)
+            + &format!("weight decay:{}\n", self.wdecay);
+        self.putlog(&msg);
+        if let Some(pb) = &pbchild {
+            pb.finish_with_message(
+                format!("preparing {progress} - done!"));
+        }
+
+        self.start_time();
+
+        if self.is_cos_anealing() {  // cos anealing
+            self.warmup_sequence_large(
+                &nnet, &mut vs, &mut optm, minibatch, progress);
+
+            self.cos_anealing_sequence_large(
+                &nnet, &mut vs, &mut optm, minibatch, progress);
+        } else {
+            self.std_sequence_large(
+                &nnet, &mut vs, &mut optm, minibatch, progress);
+        }
+
+        // VarStore to weights
+        neuralnet::storeweights(&mut self.weights, vs, progress);
+
+        Ok(())
+    }
+
+    /// 一括でデータを読み込んでおいてそれを学習するモード
+    ///
+    /// # Arguments
+    /// - `progress`: progress of the game.
+    /// - `pbtop`: progressbar
+    fn run_normal(&mut self, progress : usize, pbtop : &Option<ProgressBar>)
+             -> Result<(), tch::TchError> {
+        self.anealing_step = 0;
+
+        let pbchild = if pbtop.is_some() {
+            let pb = self.multibar.add(
+                ProgressBar::new(
+                    {
+                        let steps =
+                            self.matedir.len() + self.kifudir.len() + 7;
+                        steps + self.matefiles.len()
+                    } as u64));
+            pb.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}]{wide_bar}[{eta_precise}] {pos}/{len} {msg}").unwrap()
+                .progress_chars("🪵🪓🌴"));
+            pb.set_message("loading data...");
+            Some(pb)
+        } else {
+            None
+        };
+        let (input, target) = self.prepare_data(progress, &pbchild);
+        let inputs = input.chunk(self.testratio, 0);
+        let targets = target.chunk(self.testratio, 0);
+        if let Some(pb) = &pbchild {pb.inc(1);}
+
+        let mut vs = VarStore::new(self.device);
+        let nnet = neuralnet::net(&vs.root());
+
+        if let Err(err) = neuralnet::load(&mut vs, &self.weights, progress) {
+            panic!("{err}");
+        }
+
+        if let Some(pb) = &pbchild {pb.inc(1);}
+        let mut optm = nn::AdamW::default().build(&vs, self.eta)?;
+        optm.set_weight_decay(self.wdecay);
+
+        self.putlog(&
+            vs.variables().iter().map(|(key, t)| {
+                format!("{key}:{:?}\n", t.size())
+            }).collect::<Vec<String>>().join(""));
+        let datasize = target.size()[0];
+        
+        let minibatch = self.adjust_minibatch(datasize);
+        
+        let msg = format!("auto stop:{:?}\n", self.autostop)
+            + &format!("datasize: {datasize}\n")
+            + &format!("devtype: {}\n", self.devtype)
+            + &format!("cosine aneaing:{}\n", self.period)
+            + &format!("epoch:{}\n", self.epoch)
+            + &format!("eta:{}\n", self.eta)
+            + &format!("mini batch: {minibatch}\n")
+            + &format!("test ratio:{}\n", self.testratio)
+            + &format!("training part: {:?}\n", self.trainingpart)
+            + &format!("warmup: {}\n", self.warmup)
+            + &format!("weight decay:{}\n", self.wdecay);
+        self.putlog(&msg);
+        if let Some(pb) = &pbchild {
+            pb.finish_with_message(
+                format!("preparing {progress} - done!"));
+        }
+
+        self.start_time();
+
+        if self.is_cos_anealing() {  // cos anealing
+            self.warmup_sequence(
+                &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
+
+            self.cos_anealing_sequence(
+                &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
+        } else {
+            self.std_sequence(
+                &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
+        }
+
+        // VarStore to weights
+        neuralnet::storeweights(&mut self.weights, vs, progress);
 
         Ok(())
     }
@@ -704,25 +1296,94 @@ fn test_partlist() {
 
     let s1 = Some(String::new());
     let p1 = Training::partlist(&s1);
-    assert_eq!(p1, vec![true, true, true, true, true, true]);
+    assert_eq!(
+        p1, vec![Part::On, Part::On, Part::On, Part::On, Part::On, Part::On]);
 
     let s2 = Some(String::from("1,,0"));
     let p2 = Training::partlist(&s2);
-    assert_eq!(p2, vec![true, false, false, true, true, true]);
+    assert_eq!(p2,
+        vec![Part::On, Part::Off, Part::Off, Part::On, Part::On, Part::On]);
 
     let s3 = Some(String::from("-1,false,zero,no,none,off"));
     let p3 = Training::partlist(&s3);
-    assert_eq!(p3, vec![true, false, false, false, false, false]);
+    assert_eq!(p3,
+        vec![Part::On, Part::Off, Part::Off, Part::Off, Part::Off, Part::Off]);
 
     // let s4 = Some(String::from("no,none,off"));
     // let p4 = Training::partlist(&s4);
-    // assert_eq!(p4, vec![false, false, false]);
+    // assert_eq!(p4, vec![Part::Off, Part::Off, Part::Off]);
 
     let s5 = Some(String::from("no,none,a,0"));
     let p5 = Training::partlist(&s5);
-    assert_eq!(p5, vec![false, false, true, false, true, true]);
+    assert_eq!(p5,
+        vec![Part::Off, Part::Off, Part::On, Part::Off, Part::On, Part::On]);
 
     let s6 = Some(String::from("0,"));
     let p6 = Training::partlist(&s6);
-    assert_eq!(p6, vec![false, false, true, true, true, true]);
+    assert_eq!(p6,
+        vec![Part::Off, Part::Off, Part::On, Part::On, Part::On, Part::On]);
+
+    let s7 = Some(String::from(",,,,large,large"));
+    let p7 = Training::partlist(&s7);
+    assert_eq!(p7,
+        vec![Part::Off, Part::Off, Part::Off, Part::Off, Part::Large, Part::Large]);
+}
+
+#[test]
+fn test_gen_largedata_index() {
+    let arg = argument::Arg::parse_from(
+        ["", "--large-dir", "aaa", "--large-ratio", "10,5,2"]);
+    let t = Training::from(arg);
+    assert!(t.is_large_data_mode());
+    let (a, b) = t.gen_largedata_index().unwrap();
+    assert_eq!(a.len(), 5);
+    assert_eq!(b.len(), 2);
+
+    let arg = argument::Arg::parse_from(
+        ["", "--large-dir", "aaa", "--large-ratio", "10,5,5"]);
+    let t = Training::from(arg);
+    assert!(t.is_large_data_mode());
+    let (a, b) = t.gen_largedata_index().unwrap();
+    assert_eq!(a.len(), 5);
+    assert_eq!(b.len(), 5);
+
+    let c = [a.as_slice(), b.as_slice()].concat();
+
+    for i in 0..10 {
+        assert!(c.contains(&i));
+    }
+}
+
+#[test]
+fn test_gen_largedata_index_invalid() {
+    let arg = argument::Arg::parse_from([""]);
+    let t = Training::from(arg);
+    assert!(!t.is_large_data_mode());
+    assert_eq!(t.gen_largedata_index(), None);
+
+    let arg = argument::Arg::parse_from(["", "--large-ratio", "10,5,2"]);
+    let t = Training::from(arg);
+    assert!(!t.is_large_data_mode());
+    let (a, b) = t.gen_largedata_index().unwrap();
+    assert_eq!(a.len(), 5);
+    assert_eq!(b.len(), 2);
+    assert_eq!(t.progressbar_max(100), 100 * (1 + 4 * 3 + 3 * 2));
+
+    let arg = argument::Arg::parse_from(["", "--large-dir", "aaa" ]);
+    let t = Training::from(arg);
+    assert!(!t.is_large_data_mode());
+    assert_eq!(t.gen_largedata_index(), None);
+    assert_eq!(t.large_dir, "aaa");
+
+    let arg = argument::Arg::parse_from(
+        ["", "--large-dir", "aaa", "--large-ratio", "10,5,6"]);
+    let t = Training::from(arg);
+    assert!(!t.is_large_data_mode());
+    assert_eq!(t.gen_largedata_index(), None);
+
+    let arg = argument::Arg::parse_from(
+        ["", "--large-dir", "aaa", "--large-ratio", "10,7,4"]);
+    let t = Training::from(arg);
+    assert!(!t.is_large_data_mode());
+    assert_eq!(t.gen_largedata_index(), None);
 }
