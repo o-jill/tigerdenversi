@@ -990,8 +990,19 @@ impl Training {
                 continue;
             }
 
-            if p.is_large() && self.is_large_data_mode() {
-                self.run_large_dataset(progress, &pbtop)?;
+            if p.is_large() {
+                if self.is_large_data_mode() {
+                    self.run_large_dataset(progress, &pbtop)?;
+                } else {
+                    let div = self.large_ratio[LargeRatioIndex::Div as usize];
+                    let train = self.large_ratio[LargeRatioIndex::Train as usize];
+                    let eval = self.large_ratio[LargeRatioIndex::Eval as usize];
+                    let large_dir = &self.large_dir;
+                    eprintln!("invalid data mode!");
+                    eprintln!("large_dir:{large_dir}");
+                    eprintln!("div,train,eval:{div},{train},{eval}");
+                    return Err(tch::TchError::Torch(format!("invalid data mode!")));
+                }
             } else {
                 self.run_normal(progress, &pbtop)?;
             }
