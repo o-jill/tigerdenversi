@@ -212,8 +212,9 @@ pub fn prepare_large_mate(input_dir : &[String], input_files : &[String], output
     for inputdir in input_dir {
         let files = find_mate_files(inputdir);
         for fname in files {
+            let path = std::path::Path::new(inputdir).join(fname);
             let content =
-                load_mates_all(&fname).map_err(|e| format!("err:{e}"))?;
+                load_mates_all(path.to_str().unwrap()).map_err(|e| format!("error to read input_dir:{e}"))?;
 
             // ファイルに出力する
             tx.send(content).unwrap();
@@ -224,7 +225,7 @@ pub fn prepare_large_mate(input_dir : &[String], input_files : &[String], output
         let path = std::env::current_dir().unwrap().join(fname);
         let content =
             load_mates_all(path.to_str().unwrap())
-                .map_err(|e| format!("err:{e}"))?;
+                .map_err(|e| format!("error to read input_files:{e}"))?;
 
         // ファイルに出力する
         tx.send(content).unwrap();
