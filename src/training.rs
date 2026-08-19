@@ -79,6 +79,7 @@ pub struct Training {
     large_dir : String,
     large_ratio : [i32 ; LargeRatioIndex::Size as usize],
     // ui, log
+    files_in_progress : bool,
     log : std::fs::File,
     loss_curve : Vec<f64>,
     multibar : MultiProgress,
@@ -168,6 +169,7 @@ impl From<argument::Arg> for Training {
             awdecay : arg.awdecay,
             weights,
             multibar : MultiProgress::new(),
+            files_in_progress : arg.file_in_progress,
             log,
             loss_curve :
                 Vec::with_capacity(
@@ -1008,6 +1010,7 @@ impl Training {
             }
 
             if let Some(pb ) = &pbtop {pb.inc(1);}
+            if self.files_in_progress {neuralnet::writeweights(&self.weights);}
         }
 
         neuralnet::writeweights(&self.weights);
