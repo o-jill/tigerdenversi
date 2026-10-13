@@ -67,4 +67,7 @@ pub struct Arg {
     /// # of devision, # for training and # for loss evaluation for large training dataset.
     #[arg(long, value_delimiter=',')]
     pub large_ratio : Vec<i32>,
+    /// write weights after training each part.
+    #[arg(long, default_value_t = false)]
+    pub file_in_progress : bool,
 }
