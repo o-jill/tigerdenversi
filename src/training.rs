@@ -395,7 +395,9 @@ impl Training {
 
             let dirpath = std::path::Path::new(&self.large_dir);
             let path = data_loader::gen_div_file_name(dirpath, index);
-            data_loader::load_mates(path.to_str().unwrap(), progress)
+            let aug = false;  // w/o augmentation
+            // let aug = true;  // w/ augmentation
+            data_loader::load_mates(path.to_str().unwrap(), progress, aug)
                 .unwrap_or_else(|e| {
                     panic!("{e} in load mates in prepare_large_dataset")
                 })
