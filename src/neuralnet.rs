@@ -136,7 +136,7 @@ pub fn storeweights(weights_dst : &mut weight::Weight, vs : VarStore, progress :
     let l3b = weights.get("layer3.bias").unwrap();
     // println!("layer3.bias:{:?}", l3b.size());
     let numel = l3b.numel();
-    l1w.copy_data(tmp.as_mut_slice(), numel);
+    l3b.copy_data(tmp.as_mut_slice(), numel);
     *outp.last_mut().unwrap() = tmp[0];
 
     println!("store to weight [{progress}]");
