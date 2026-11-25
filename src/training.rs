@@ -645,7 +645,7 @@ impl Training {
                     eprintln!("{msg}");
                     self.putlog(&msg);
                     let msg = format!(
-                        "ep: {ep} iloss: {iloss} input_mean: {:.3} target_mean: {:.3}",
+                        "ep: {ep} iloss: {iloss} input_mean: {:.3} target_mean: {:.3}, optm:{optm:?}",
                         inputs[iloss].mean(Kind::Float).double_value(&[]),
                         targets[iloss].mean(Kind::Float).double_value(&[]));
                     eprintln!("{msg}");
@@ -739,43 +739,49 @@ impl Training {
                     optm.backward_step(&loss);
                 }
             }
-            let testloss = if eval_idx.is_empty() {
-                    0f64
+            let (test_loss, input_mean, target_mean) = if eval_idx.is_empty() {
+                    (0f64, 0f64, 0f64)
                 } else {
                     let (inputs, targets) =
                         self.prepare_large_dataset(&eval_idx, progress, &pb);
                     let loss = nnet.forward(&inputs)
                             .mse_loss(&targets, tch::Reduction::Mean);
-                    loss.double_value(&[])
+                    (loss.double_value(&[]),
+                     inputs.mean(Kind::Float).double_value(&[]),
+                     targets.mean(Kind::Float).double_value(&[]))
                 };
             let elapsed = self.elapsed();
-            final_loss = testloss;
-            self.loss_curve.push(testloss);
-            self.update(testloss, &pb, ep + self.warmup, elapsed);
+            final_loss = test_loss;
+            self.loss_curve.push(test_loss);
+            self.update(test_loss, &pb, ep + self.warmup, elapsed);
             // 学習を始めたけどロスが大きいときはなにかおかしい
             if ep >  5 {
                 // 少なくとも300を超えてるときはおかしい
                 const WARNING_THRESHOLD : f64 = 300f64;
-                if testloss > WARNING_THRESHOLD {
-                    let msg = format!("loss:{testloss}, ep:{ep}, lr:{new_lr}");
+                if test_loss > WARNING_THRESHOLD {
+                    let msg = format!("loss:{test_loss}, ep:{ep}, lr:{new_lr}");
                     eprintln!("{msg}");
                     self.putlog(&msg);
                     let msg = format!(
-                        "ep: {ep} iloss: {iloss} input_mean: ??? target_mean: ???");
+                        "ep: {ep} iloss: {iloss} input_mean: {input_mean} target_mean: {target_mean}");
                     // let msg = format!(
                     //     "ep: {ep} iloss: {iloss} input_mean: {:.3} target_mean: {:.3}",
                     //     inputs[iloss].mean(Kind::Float).double_value(&[]),
                     //     targets[iloss].mean(Kind::Float).double_value(&[]));
                     eprintln!("{msg}");
                     self.putlog(&msg);
+                    let msg = format!("optimizer:{optm:?}");
+                    eprintln!("{msg}");
+                    self.putlog(&msg);
                     // panic!("{msg}");
+                    break;
                 }
             }
 
             if self.autostop.is_none() {continue;}
 
             let threshold = self.autostop.unwrap();
-            sum_loss += testloss;
+            sum_loss += test_loss;
             let testratio = self.testratio;
             if (ep + 1) % (testratio as i32 * self.period) as usize == 0 {
                 let msg = format!("sum_loss{}:{sum_loss}", ep + 1);
