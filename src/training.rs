@@ -395,7 +395,9 @@ impl Training {
 
             let dirpath = std::path::Path::new(&self.large_dir);
             let path = data_loader::gen_div_file_name(dirpath, index);
-            data_loader::load_mates(path.to_str().unwrap(), progress)
+            let aug = false;  // w/o augmentation
+            // let aug = true;  // w/ augmentation
+            data_loader::load_mates(path.to_str().unwrap(), progress, aug)
                 .unwrap_or_else(|e| {
                     panic!("{e} in load mates in prepare_large_dataset")
                 })
@@ -575,7 +577,7 @@ impl Training {
 
     fn cos_anealing_sequence(&mut self, nnet : &impl nn::Module,
             vs : &mut VarStore, optm : &mut tch::nn::Optimizer,
-            inputs : &[Tensor], targets : &[Tensor], minibatch : i64) {
+            inputs : &[Tensor], targets : &[Tensor], minibatch : i64) -> Result<(), String> {
         let pb = if self.show_progressbar {
             let pb = self.multibar.add(
             ProgressBar::new(self.epoch as u64));
@@ -640,15 +642,16 @@ impl Training {
                 const WARNING_THRESHOLD : f64 = 300f64;
                 if testloss > WARNING_THRESHOLD {
                     let msg = format!("loss:{testloss}, ep:{ep}, lr:{new_lr}");
-                    eprintln!("{msg}");
+                    // eprintln!("{msg}");
                     self.putlog(&msg);
-                    let msg = format!(
-                        "ep: {ep} iloss: {iloss} input_mean: {:.3} target_mean: {:.3}",
+                    let msg2 = format!(
+                        "ep: {ep} iloss: {iloss} input_mean: {:.3} target_mean: {:.3}, optm:{optm:?}",
                         inputs[iloss].mean(Kind::Float).double_value(&[]),
                         targets[iloss].mean(Kind::Float).double_value(&[]));
-                    eprintln!("{msg}");
-                    self.putlog(&msg);
-                    panic!("{msg}");
+                    // eprintln!("{msg2}");
+                    self.putlog(&msg2);
+                    // panic!("{msg}");
+                    return Err(msg + "\n" + &msg2);
                 }
             }
 
@@ -675,11 +678,13 @@ impl Training {
             pb.finish_with_message(
                 format!("cos anealing - done! final loss:{final_loss:.3}"));
         }
+
+        Ok(())
     }
 
     fn cos_anealing_sequence_large(&mut self, nnet : &impl nn::Module,
             vs : &mut VarStore, optm : &mut tch::nn::Optimizer,
-            minibatch : i64, progress : usize) {
+            minibatch : i64, progress : usize) -> Result<(), String> {
         let pb = if self.show_progressbar {
             let pb = self.multibar.add(
                 ProgressBar::new(self.progressbar_max(self.epoch)));
@@ -737,43 +742,50 @@ impl Training {
                     optm.backward_step(&loss);
                 }
             }
-            let testloss = if eval_idx.is_empty() {
-                    0f64
+            let (test_loss, input_mean, target_mean) = if eval_idx.is_empty() {
+                    (0f64, 0f64, 0f64)
                 } else {
                     let (inputs, targets) =
                         self.prepare_large_dataset(&eval_idx, progress, &pb);
                     let loss = nnet.forward(&inputs)
                             .mse_loss(&targets, tch::Reduction::Mean);
-                    loss.double_value(&[])
+                    (loss.double_value(&[]),
+                     inputs.mean(Kind::Float).double_value(&[]),
+                     targets.mean(Kind::Float).double_value(&[]))
                 };
             let elapsed = self.elapsed();
-            final_loss = testloss;
-            self.loss_curve.push(testloss);
-            self.update(testloss, &pb, ep + self.warmup, elapsed);
+            final_loss = test_loss;
+            self.loss_curve.push(test_loss);
+            self.update(test_loss, &pb, ep + self.warmup, elapsed);
             // 学習を始めたけどロスが大きいときはなにかおかしい
             if ep >  5 {
                 // 少なくとも300を超えてるときはおかしい
                 const WARNING_THRESHOLD : f64 = 300f64;
-                if testloss > WARNING_THRESHOLD {
-                    let msg = format!("loss:{testloss}, ep:{ep}, lr:{new_lr}");
-                    eprintln!("{msg}");
+                if test_loss > WARNING_THRESHOLD {
+                    let msg = format!("loss:{test_loss}, ep:{ep}, lr:{new_lr}");
+                    // eprintln!("{msg}");
                     self.putlog(&msg);
-                    let msg = format!(
-                        "ep: {ep} iloss: {iloss} input_mean: ??? target_mean: ???");
+                    let msg2 = format!(
+                        "ep: {ep} iloss: {iloss} input_mean: {input_mean} target_mean: {target_mean}");
                     // let msg = format!(
                     //     "ep: {ep} iloss: {iloss} input_mean: {:.3} target_mean: {:.3}",
                     //     inputs[iloss].mean(Kind::Float).double_value(&[]),
                     //     targets[iloss].mean(Kind::Float).double_value(&[]));
-                    eprintln!("{msg}");
-                    self.putlog(&msg);
-                    // panic!("{msg}");
+                    // eprintln!("{msg2}");
+                    self.putlog(&msg2);
+                    let msg3 = format!("optimizer:{optm:?}");
+                    // eprintln!("{msg3}");
+                    self.putlog(&msg3);
+                    // panic!("{msg3}");
+                    // break;
+                    return Err(msg + "\n" + &msg2 + "\n" + &msg3);
                 }
             }
 
             if self.autostop.is_none() {continue;}
 
             let threshold = self.autostop.unwrap();
-            sum_loss += testloss;
+            sum_loss += test_loss;
             let testratio = self.testratio;
             if (ep + 1) % (testratio as i32 * self.period) as usize == 0 {
                 let msg = format!("sum_loss{}:{sum_loss}", ep + 1);
@@ -794,6 +806,7 @@ impl Training {
             pb.finish_with_message(
                 format!("cos anealing - done! final loss:{final_loss:.3}"));
         }
+        Ok(())
     }
 
     fn std_sequence(&mut self, nnet : &impl nn::Module,
@@ -1141,14 +1154,17 @@ impl Training {
             self.warmup_sequence_large(
                 &nnet, &mut vs, &mut optm, minibatch, progress);
 
-            self.cos_anealing_sequence_large(
-                &nnet, &mut vs, &mut optm, minibatch, progress);
+            if let Err(msg) = self.cos_anealing_sequence_large(
+                    &nnet, &mut vs, &mut optm, minibatch, progress) {
+                eprintln!("{msg}");
+                return Err(tch::TchError::Torch(msg))
+            }
         } else {
             self.std_sequence_large(
                 &nnet, &mut vs, &mut optm, minibatch, progress);
         }
 
-        // VarStore to weights
+        // VarStore to weights even if some error happends in training
         neuralnet::storeweights(&mut self.weights, vs, progress);
 
         Ok(())
@@ -1227,8 +1243,11 @@ impl Training {
             self.warmup_sequence(
                 &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
 
-            self.cos_anealing_sequence(
-                &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
+            if let Err(msg) = self.cos_anealing_sequence(
+                    &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch) {
+                eprintln!("{msg}");
+                return Err(tch::TchError::Torch(msg))
+            }
         } else {
             self.std_sequence(
                 &nnet, &mut vs, &mut optm, &inputs, &targets, minibatch);
